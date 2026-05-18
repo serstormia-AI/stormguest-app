@@ -1,4 +1,5 @@
-import { getAdminSupabase, createSSRSupabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
+import { createSSRSupabase } from "@/lib/supabase-server";
 import { User, KeyRound, Calendar, CreditCard, Receipt } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";

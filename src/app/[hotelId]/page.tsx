@@ -1,4 +1,5 @@
-import { getAdminSupabase, createSSRSupabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
+import { createSSRSupabase } from "@/lib/supabase-server";
 import GuestDashboardClient from "@/components/GuestDashboardClient";
 import { redirect } from "next/navigation";
 
