@@ -2,10 +2,18 @@
 
 import { motion } from "framer-motion";
 import { use, useEffect, useState, useRef } from "react";
-import { Send, ArrowLeft, Bot } from "lucide-react";
+import { Send } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+
+type Message = {
+    id: string;
+    hotel_id: string;
+    guest_id: string;
+    sender_type: "guest" | "staff" | "bot";
+    content: string;
+    created_at: string;
+};
 
 // Instancia única del browser client (cookie-based session)
 const supabase = createBrowserSupabase();
@@ -13,7 +21,7 @@ const supabase = createBrowserSupabase();
 export default function GuestChatPage({ params }: { params: Promise<{ hotelId: string }> }) {
     const { hotelId } = use(params);
     const router = useRouter();
-    const [messages, setMessages] = useState<any[]>([]);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(true);
 
@@ -83,7 +91,7 @@ export default function GuestChatPage({ params }: { params: Promise<{ hotelId: s
                     filter: `guest_id=eq.${guestId}`
                 },
                 (payload) => {
-                    setMessages(prev => [...prev, payload.new]);
+                    setMessages(prev => [...prev, payload.new as Message]);
                     scrollToBottom();
                 }
             )

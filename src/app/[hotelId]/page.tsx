@@ -32,7 +32,7 @@ export default async function GuestDashboardPage({ params }: { params: Promise<{
         .eq('slug', hotelId)
         .single();
 
-    let experiences = [];
+    let experiences: Record<string, unknown>[] = [];
 
     if (hotelData) {
         const { data: expData } = await supabase
