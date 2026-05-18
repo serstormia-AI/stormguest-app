@@ -1,20 +1,29 @@
-import { getAdminSupabase } from "@/lib/supabase";
+import { getAdminSupabase, createSSRSupabase } from "@/lib/supabase";
 import { User, KeyRound, Calendar, CreditCard, Receipt } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 export const revalidate = 0; // Dynamic
 
 export default async function GuestProfilePage({ params }: { params: Promise<{ hotelId: string }> }) {
     const { hotelId } = await params;
-    const supabase = getAdminSupabase();
 
-    // 1. Get Hotel
+    // 1. Identify the authenticated guest via the SSR client (cookie-based session)
+    const ssrSupabase = await createSSRSupabase();
+    const { data: { user }, error: authError } = await ssrSupabase.auth.getUser();
+    if (authError || !user) redirect(`/${hotelId}/login`);
+
+    const { data: guest, error: guestError } = await ssrSupabase
+        .from('guests')
+        .select('*')
+        .eq('auth_user_id', user.id)
+        .single();
+    if (guestError || !guest) redirect(`/${hotelId}/login`);
+
+    // 2. Get Hotel (non-sensitive, can use admin client)
+    const supabase = getAdminSupabase();
     const { data: hotel } = await supabase.from('hotels').select('id, name, primary_color').eq('slug', hotelId).single();
     if (!hotel) return <div>Hotel not found</div>;
-
-    // 2. Get Guest (Mock Auth)
-    const { data: guest } = await supabase.from('guests').select('*').eq('hotel_id', hotel.id).limit(1).single();
-    if (!guest) return <div className="p-8 text-center text-white">No hay sesión activa.</div>;
 
     // 3. Get Reservation
     const { data: reservation } = await supabase.from('reservations').select('*').eq('guest_id', guest.id).order('created_at', { ascending: false }).limit(1).single();

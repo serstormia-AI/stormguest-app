@@ -3,49 +3,52 @@
 import { motion } from "framer-motion";
 import { use, useEffect, useState, useRef } from "react";
 import { Send, ArrowLeft, Bot } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { createBrowserSupabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+
+// Instancia única del browser client (cookie-based session)
+const supabase = createBrowserSupabase();
 
 export default function GuestChatPage({ params }: { params: Promise<{ hotelId: string }> }) {
     const { hotelId } = use(params);
+    const router = useRouter();
     const [messages, setMessages] = useState<any[]>([]);
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(true);
-    
-    // Auth context mocks
+
     const [dbHotelId, setDbHotelId] = useState("");
     const [guestId, setGuestId] = useState("");
-    
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Fetch initial data
     useEffect(() => {
         const initChat = async () => {
-            // 1. Get Hotel
-            const { data: hotel } = await supabase.from('hotels').select('id').eq('slug', hotelId).single();
-            if (!hotel) return;
-            setDbHotelId(hotel.id);
+            // 1. Verificar sesión autenticada del huésped
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                router.replace(`/${hotelId}/login`);
+                return;
+            }
 
-            // 2. Get the demo guest (Mocking auth session)
-            let { data: guest } = await supabase.from('guests').select('id').eq('hotel_id', hotel.id).limit(1).single();
-            
-            // Si no hay huesped creado en la base de datos, creamos uno de prueba para que no se bloquee el chat
+            // 2. Obtener el registro de guest vinculado al usuario autenticado
+            const { data: guest } = await supabase
+                .from('guests')
+                .select('id, hotel_id')
+                .eq('auth_user_id', user.id)
+                .single();
+
             if (!guest) {
-                const { data: newGuest } = await supabase.from('guests').insert({
-                    hotel_id: hotel.id,
-                    first_name: 'Huésped',
-                    last_name: 'Demo',
-                    email: 'demo@stormguest.com',
-                    phone: '+123456789'
-                }).select().single();
-                guest = newGuest;
+                router.replace(`/${hotelId}/login`);
+                return;
             }
 
-            if (guest) {
-                setGuestId(guest.id);
-                // 3. Fetch Messages
-                fetchMessages(hotel.id, guest.id);
-            }
+            setGuestId(guest.id);
+            setDbHotelId(guest.hotel_id);
+
+            // 3. Fetch Messages iniciales
+            fetchMessages(guest.hotel_id, guest.id);
         };
         initChat();
     }, [hotelId]);
@@ -67,35 +70,27 @@ export default function GuestChatPage({ params }: { params: Promise<{ hotelId: s
     useEffect(() => {
         if (!dbHotelId || !guestId) return;
 
-        // Realtime
+        // Canal con nombre único por guest y filtro server-side para no recibir
+        // mensajes de otros huéspedes
         const channel = supabase
-            .channel('realtime-chat')
+            .channel(`chat-${guestId}`)
             .on(
                 'postgres_changes',
                 {
                     event: 'INSERT',
                     schema: 'public',
-                    table: 'messages'
+                    table: 'messages',
+                    filter: `guest_id=eq.${guestId}`
                 },
                 (payload) => {
-                    if (payload.new.guest_id === guestId) {
-                        setMessages(prev => [...prev, payload.new]);
-                        scrollToBottom();
-                    }
+                    setMessages(prev => [...prev, payload.new]);
+                    scrollToBottom();
                 }
             )
             .subscribe();
 
-        // FALLBACK: Polling cada 3 segundos
-        const fallbackInterval = setInterval(() => {
-            if (dbHotelId && guestId) {
-                fetchMessages(dbHotelId, guestId);
-            }
-        }, 3000);
-
         return () => {
             supabase.removeChannel(channel);
-            clearInterval(fallbackInterval);
         };
     }, [dbHotelId, guestId]);
 

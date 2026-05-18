@@ -1,23 +1,35 @@
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/supabase";
 
+// Normalize strings for case-insensitive + accent-insensitive comparison
+function normalizeString(str: string): string {
+    return str.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { reservationId, lastName, hotelId, authUserId } = body;
+        const { reservationId, roomNumber, lastName, hotelId, authUserId } = body;
 
-        if (!reservationId || !lastName || !hotelId || !authUserId) {
+        // authUserId and lastName are always required. One of reservationId or roomNumber must be present.
+        if (!lastName || !hotelId || !authUserId) {
             return NextResponse.json(
-                { error: "Faltan datos requeridos (reservationId, lastName, hotelId, authUserId)" },
+                { error: "Faltan datos requeridos (lastName, hotelId, authUserId)" },
                 { status: 400 }
             );
         }
 
-        // We use the admin client because the user is not authenticated yet.
-        // We need to safely verify the reservation based on exact matches.
+        if (!reservationId && !roomNumber) {
+            return NextResponse.json(
+                { error: "Se requiere reservationId o roomNumber" },
+                { status: 400 }
+            );
+        }
+
+        // Use the admin client — user is not authenticated yet.
         const supabase = getAdminSupabase();
 
-        // 1. First find the hotel by slug to get its UUID
+        // 1. Find the hotel by slug to get its UUID
         const { data: hotelData, error: hotelError } = await supabase
             .from('hotels')
             .select('id')
@@ -28,50 +40,91 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Hotel no encontrado" }, { status: 404 });
         }
 
-        // 2. Search for the reservation matching the pms_id and hotel UUID
-        // We join with guests to verify the last name.
-        const { data: reservation, error: resError } = await supabase
-            .from('reservations')
-            .select(`
-                id,
-                pms_id,
-                status,
-                checkin_date,
-                checkout_date,
-                room_number,
-                guests!inner (
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+        let reservation: any = null;
+        let resError: any = null;
+
+        // Only reservations in an active state are accepted.
+        // 'cancelled', 'checked_out', and 'pending' are all rejected.
+        const ACTIVE_STATUSES = ['confirmed', 'checked_in'] as const;
+
+        if (reservationId) {
+            // ── Flow A: Verify by PMS reservation ID (used by the check-in flow) ──
+            ({ data: reservation, error: resError } = await supabase
+                .from('reservations')
+                .select(`
                     id,
-                    first_name,
-                    last_name
-                )
-            `)
-            .eq('hotel_id', hotelData.id)
-            .eq('pms_id', reservationId.trim().toUpperCase())
-            .single();
+                    pms_id,
+                    status,
+                    checkin_date,
+                    checkout_date,
+                    room_number,
+                    guests!inner (
+                        id,
+                        first_name,
+                        last_name
+                    )
+                `)
+                .eq('hotel_id', hotelData.id)
+                .eq('pms_id', reservationId.trim().toUpperCase())
+                .in('status', ACTIVE_STATUSES)
+                .single());
+        } else {
+            // ── Flow B: Verify by room number (used by the guest login page) ──
+            // Requires an active reservation (checkout_date >= today)
+            ({ data: reservation, error: resError } = await supabase
+                .from('reservations')
+                .select(`
+                    id,
+                    pms_id,
+                    status,
+                    checkin_date,
+                    checkout_date,
+                    room_number,
+                    guests!inner (
+                        id,
+                        first_name,
+                        last_name
+                    )
+                `)
+                .eq('hotel_id', hotelData.id)
+                .eq('room_number', roomNumber.trim())
+                .gte('checkout_date', today)
+                .in('status', ACTIVE_STATUSES)
+                // Prefer the reservation whose check-in date is closest to today
+                .order('checkin_date', { ascending: false })
+                .limit(1)
+                .single());
+        }
 
         if (resError || !reservation) {
             return NextResponse.json(
-                { error: "No pudimos encontrar una reserva con ese ID" },
+                { error: "No pudimos encontrar una reserva activa con esos datos" },
                 { status: 404 }
             );
         }
 
-        // 3. Verify Last Name (case insensitive & ignore accents)
-        const normalizeString = (str: string) => {
-            return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-        };
+        // 2. Verify checkout date is not in the past (for reservation ID flow too)
+        if (reservation.checkout_date < today) {
+            return NextResponse.json(
+                { error: "La reserva ya venció. Si necesitas ayuda contacta recepción." },
+                { status: 401 }
+            );
+        }
 
+        // 3. Verify last name (case-insensitive, accent-insensitive)
         const guestLastName = normalizeString((reservation.guests as any).last_name);
         const inputLastName = normalizeString(lastName);
 
         if (guestLastName !== inputLastName) {
             return NextResponse.json(
                 { error: "El apellido no coincide con la reserva" },
-                { status: 400 }
+                { status: 401 }
             );
         }
 
-        // 4. Enlazar la sesión anónima (auth.uid) con el perfil del huésped en la DB
+        // 4. Link the anonymous auth session to the guest profile
         const { error: updateError } = await supabase
             .from('guests')
             .update({ auth_user_id: authUserId })
@@ -85,14 +138,18 @@ export async function POST(request: Request) {
             );
         }
 
-        // All good!
+        // 5. Return verified guest + reservation data
         return NextResponse.json({
             success: true,
             reservation: {
                 id: reservation.id,
+                pmsId: reservation.pms_id,
                 status: reservation.status,
                 guestName: `${(reservation.guests as any).first_name} ${(reservation.guests as any).last_name}`,
-                checkinDate: reservation.checkin_date
+                guestId: (reservation.guests as any).id,
+                roomNumber: reservation.room_number,
+                checkinDate: reservation.checkin_date,
+                checkoutDate: reservation.checkout_date,
             }
         });
 

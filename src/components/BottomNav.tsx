@@ -13,7 +13,7 @@ export default function BottomNav({ hotelId }: { hotelId: string }) {
         { icon: MessageCircle, label: "Chat", path: `/${hotelId}/chat` },
         { icon: User, label: "Perfil", path: `/${hotelId}/profile` }
     ];
-    if (pathname.endsWith("/checkin")) {
+    if (pathname.endsWith("/checkin") || pathname.endsWith("/login")) {
         return null;
     }
 
