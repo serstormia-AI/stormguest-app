@@ -32,7 +32,8 @@ export default async function GuestDashboardPage({ params }: { params: Promise<{
         .eq('slug', hotelId)
         .single();
 
-    let experiences: Record<string, unknown>[] = [];
+    type Experience = { id: string; title: string; price: number; currency: string; description: string; image_url: string; };
+    let experiences: Experience[] = [];
 
     if (hotelData) {
         const { data: expData } = await supabase
