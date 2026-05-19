@@ -14,12 +14,15 @@ export default async function GuestDashboardPage({ params }: { params: Promise<{
     const { data: { user }, error: authError } = await ssrSupabase.auth.getUser();
     if (authError || !user) redirect(`/${hotelId}/login`);
 
-    const { data: guest, error: guestError } = await ssrSupabase
+    // Use admin client so RLS doesn't block the auth_user_id lookup
+    // (identity already verified above via getUser())
+    const adminSupabase = getAdminSupabase();
+    const { data: guest } = await adminSupabase
         .from('guests')
         .select('id')
         .eq('auth_user_id', user.id)
         .single();
-    if (guestError || !guest) redirect(`/${hotelId}/login`);
+    if (!guest) redirect(`/${hotelId}/login`);
 
     const guestId = guest.id;
 

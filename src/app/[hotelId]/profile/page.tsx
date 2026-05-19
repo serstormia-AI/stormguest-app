@@ -9,20 +9,19 @@ export const revalidate = 0; // Dynamic
 export default async function GuestProfilePage({ params }: { params: Promise<{ hotelId: string }> }) {
     const { hotelId } = await params;
 
-    // 1. Identify the authenticated guest via the SSR client (cookie-based session)
+    // 1. Identify the authenticated guest
     const ssrSupabase = await createSSRSupabase();
     const { data: { user }, error: authError } = await ssrSupabase.auth.getUser();
     if (authError || !user) redirect(`/${hotelId}/login`);
 
-    const { data: guest, error: guestError } = await ssrSupabase
+    // Use admin client so RLS doesn't block the auth_user_id lookup
+    const supabase = getAdminSupabase();
+    const { data: guest } = await supabase
         .from('guests')
         .select('*')
         .eq('auth_user_id', user.id)
         .single();
-    if (guestError || !guest) redirect(`/${hotelId}/login`);
-
-    // 2. Get Hotel (non-sensitive, can use admin client)
-    const supabase = getAdminSupabase();
+    if (!guest) redirect(`/${hotelId}/login`);
     const { data: hotel } = await supabase.from('hotels').select('id, name, primary_color').eq('slug', hotelId).single();
     if (!hotel) return <div>Hotel not found</div>;
 
@@ -58,7 +57,7 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ h
                         <User className="w-8 h-8 text-hotel-primary" />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-white">{guest.first_name} {guest.last_name}</h3>
+                        <h3 className="text-xl font-bold text-white">{guest.name}</h3>
                         <p className="text-sm text-stone-400">{guest.email}</p>
                     </div>
                 </div>
@@ -73,7 +72,7 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ h
                         <Calendar className="w-5 h-5 text-hotel-primary mb-2" />
                         <p className="text-xs text-stone-500">Check-out</p>
                         <p className="font-bold text-white text-sm">
-                            {reservation?.checkout_date ? new Date(reservation.checkout_date).toLocaleDateString() : '-'}
+                            {reservation?.check_out ? new Date(reservation.check_out).toLocaleDateString() : '-'}
                         </p>
                     </div>
                 </div>
