@@ -57,11 +57,10 @@ export default function GuestLoginPage({ params }: { params: Promise<{ hotelId: 
                 throw new Error(data.error || "No encontramos una reserva activa con esos datos.");
             }
 
-            // 3. Stamp the hotel slug onto the session metadata so the middleware
-            //    can enforce tenant isolation without extra DB queries on every request.
-            await supabase.auth.updateUser({
-                data: { hotelSlug: hotelId },
-            });
+            // 3. Stamp the hotel slug and force session refresh so middleware
+            //    reads the updated metadata from the cookie before redirecting.
+            await supabase.auth.updateUser({ data: { hotelSlug: hotelId } });
+            await supabase.auth.refreshSession();
 
             // 4. Redirect to the original destination (or the hotel dashboard)
             router.replace(redirectTo);
