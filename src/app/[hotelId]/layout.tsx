@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { getAdminSupabase } from "@/lib/supabase";
 import { notFound } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 
@@ -19,7 +19,7 @@ export default async function HotelLayout({
     let hotelData = null;
     
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getAdminSupabase()
             .from('hotels')
             .select('*')
             .eq('slug', hotelId)

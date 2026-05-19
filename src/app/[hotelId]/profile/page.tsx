@@ -26,7 +26,7 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ h
     if (!hotel) return <div>Hotel not found</div>;
 
     // 3. Get Reservation
-    const { data: reservation } = await supabase.from('reservations').select('*').eq('guest_id', guest.id).order('created_at', { ascending: false }).limit(1).single();
+    const { data: reservation } = await supabase.from('reservations').select('*').eq('guest_id', guest.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
 
     // 4. Get Requests (Estado de Cuenta)
     const { data: requests } = await supabase.from('requests')

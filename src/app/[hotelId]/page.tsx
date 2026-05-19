@@ -19,12 +19,13 @@ export default async function GuestDashboardPage({ params }: { params: Promise<{
     const adminSupabase = getAdminSupabase();
     const { data: guest } = await adminSupabase
         .from('guests')
-        .select('id')
+        .select('id, name')
         .eq('auth_user_id', user.id)
         .single();
     if (!guest) redirect(`/${hotelId}/login`);
 
     const guestId = guest.id;
+    const guestName: string = guest.name ?? 'Huésped';
 
     // 3. Fetch hotel and experiences with admin client (public, non-sensitive data)
     const supabase = getAdminSupabase();
@@ -51,6 +52,17 @@ export default async function GuestDashboardPage({ params }: { params: Promise<{
         }
     }
 
+    // Fetch active reservation for the guest
+    const today = new Date().toISOString().split('T')[0];
+    const { data: reservation } = await supabase
+        .from('reservations')
+        .select('room_number, check_in, check_out')
+        .eq('guest_id', guestId)
+        .gte('check_out', today)
+        .order('check_in', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
     // 4. Pass data to the Client Component
     return (
         <GuestDashboardClient
@@ -58,6 +70,9 @@ export default async function GuestDashboardPage({ params }: { params: Promise<{
             dbHotelId={hotelData?.id || ""}
             guestId={guestId}
             experiences={experiences}
+            guestName={guestName}
+            roomNumber={reservation?.room_number ?? ''}
+            checkOut={reservation?.check_out ?? null}
         />
     );
 }

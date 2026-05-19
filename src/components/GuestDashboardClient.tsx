@@ -2,8 +2,8 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Wifi, MessageSquare, Coffee, Sparkles, KeyRound, ChevronRight, X, Loader2 } from "lucide-react";
-import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useState, useMemo } from "react";
+import { createBrowserSupabase } from "@/lib/supabase";
 
 type Experience = {
     id: string;
@@ -19,9 +19,13 @@ type GuestDashboardClientProps = {
     dbHotelId: string;
     guestId: string;
     experiences: Experience[];
+    guestName: string;
+    roomNumber: string;
+    checkOut: string | null;
 };
 
-export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, experiences }: GuestDashboardClientProps) {
+export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, experiences, guestName, roomNumber, checkOut }: GuestDashboardClientProps) {
+    const supabase = useMemo(() => createBrowserSupabase(), []);
     const [selectedExp, setSelectedExp] = useState<Experience | null>(null);
     const [isPurchasing, setIsPurchasing] = useState(false);
     const [purchaseSuccess, setPurchaseSuccess] = useState(false);
@@ -78,7 +82,7 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
                 <motion.div variants={itemVariants} className="space-y-2 mt-6">
                     <div className="flex justify-between items-center">
                         <h2 className="font-heading text-3xl font-light text-white">
-                            Buenas noches, <span className="font-bold text-hotel-primary">Huésped</span>
+                            Buenas noches, <span className="font-bold text-hotel-primary">{guestName.split(' ')[0] || 'Huésped'}</span>
                         </h2>
                         <div className="flex items-center space-x-2 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
                             <span className="text-white/80 text-sm font-medium">24°C</span>
@@ -113,7 +117,7 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
                                 <KeyRound className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <p className="text-hotel-primary text-xs font-bold uppercase tracking-wider mb-1">Hab. 101</p>
+                                <p className="text-hotel-primary text-xs font-bold uppercase tracking-wider mb-1">{roomNumber ? `Hab. ${roomNumber}` : 'Mi Hab.'}</p>
                                 <h3 className="font-heading text-lg font-bold text-white">Llave Digital</h3>
                             </div>
                         </button>
@@ -124,7 +128,9 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
                                 <Wifi className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <p className="text-stone-400 text-xs font-medium uppercase tracking-wider mb-1">Conectado</p>
+                                <p className="text-stone-400 text-xs font-medium uppercase tracking-wider mb-1">
+                                    {checkOut ? `Check-out: ${new Date(checkOut + 'T12:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}` : 'Conectado'}
+                                </p>
                                 <h3 className="font-heading text-lg font-bold text-white">Red Wi-Fi</h3>
                             </div>
                         </button>
