@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
         if (!lastName || !hotelId || !authUserId) {
             return NextResponse.json(
-                { error: "Faltan datos requeridos (lastName, hotelId, authUserId)" },
+                { error: "Faltan datos requeridos" },
                 { status: 400 }
             );
         }
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
         if (reservationId) {
             ({ data: reservation, error: resError } = await supabase
                 .from('reservations')
-                .select(`id, status, check_in, check_out, room_number, guests!inner(id, first_name, last_name)`)
+                .select(`id, status, check_in, check_out, room_number, guests!inner(id, name)`)
                 .eq('hotel_id', hotelData.id)
                 .eq('id', reservationId.trim())
                 .in('status', ACTIVE_STATUSES)
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         } else {
             ({ data: reservation, error: resError } = await supabase
                 .from('reservations')
-                .select(`id, status, check_in, check_out, room_number, guests!inner(id, first_name, last_name)`)
+                .select(`id, status, check_in, check_out, room_number, guests!inner(id, name)`)
                 .eq('hotel_id', hotelData.id)
                 .eq('room_number', roomNumber.trim())
                 .gte('check_out', today)
@@ -70,14 +70,9 @@ export async function POST(request: Request) {
             );
         }
 
-        if (reservation.check_out < today) {
-            return NextResponse.json(
-                { error: "La reserva ya venció. Si necesitas ayuda contacta recepción." },
-                { status: 401 }
-            );
-        }
-
-        const guestLastName = normalizeString((reservation.guests as any).last_name);
+        // guests.name es "Carlos Garcia" — comparamos contra la última palabra
+        const guestName: string = (reservation.guests as any).name ?? '';
+        const guestLastName = normalizeString(guestName.split(' ').pop() ?? guestName);
         const inputLastName = normalizeString(lastName);
 
         if (guestLastName !== inputLastName) {
@@ -105,7 +100,7 @@ export async function POST(request: Request) {
             reservation: {
                 id: reservation.id,
                 status: reservation.status,
-                guestName: `${(reservation.guests as any).first_name} ${(reservation.guests as any).last_name}`,
+                guestName: guestName,
                 guestId: (reservation.guests as any).id,
                 roomNumber: reservation.room_number,
                 checkinDate: reservation.check_in,
