@@ -2,8 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Wifi, MessageSquare, Coffee, Sparkles, KeyRound, ChevronRight, X, Loader2 } from "lucide-react";
-import { useState, useMemo } from "react";
-import { createBrowserSupabase } from "@/lib/supabase";
+import { useState } from "react";
 
 type Experience = {
     id: string;
@@ -25,7 +24,6 @@ type GuestDashboardClientProps = {
 };
 
 export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, experiences, guestName, roomNumber, checkOut }: GuestDashboardClientProps) {
-    const supabase = useMemo(() => createBrowserSupabase(), []);
     const [selectedExp, setSelectedExp] = useState<Experience | null>(null);
     const [isPurchasing, setIsPurchasing] = useState(false);
     const [purchaseSuccess, setPurchaseSuccess] = useState(false);
@@ -44,23 +42,27 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
         if (!selectedExp || !dbHotelId || !guestId) return;
         setIsPurchasing(true);
 
-        const { error } = await supabase.from('requests').insert({
-            hotel_id: dbHotelId,
-            guest_id: guestId,
-            experience_id: selectedExp.id,
-            total_price: selectedExp.price,
-            status: 'pending'
+        const res = await fetch('/api/experiences/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                guestId,
+                dbHotelId,
+                experienceId: selectedExp.id,
+                totalPrice: selectedExp.price,
+            }),
         });
 
         setIsPurchasing(false);
-        if (!error) {
+        if (res.ok) {
             setPurchaseSuccess(true);
             setTimeout(() => {
                 setSelectedExp(null);
                 setPurchaseSuccess(false);
             }, 2000);
         } else {
-            alert("Error al procesar la solicitud: " + error.message);
+            const data = await res.json();
+            alert("Error al procesar la solicitud: " + (data.error || res.statusText));
         }
     };
 

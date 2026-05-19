@@ -26,6 +26,7 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(true);
+    const [isJuliaTyping, setIsJuliaTyping] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -45,6 +46,9 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
                 },
                 (payload) => {
                     setMessages(prev => [...prev, payload.new as Message]);
+                    if ((payload.new as Message).sender_type !== 'guest') {
+                        setIsJuliaTyping(false);
+                    }
                     scrollToBottom();
                 }
             )
@@ -78,17 +82,24 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
 
         const msgText = newMessage.trim();
         setNewMessage("");
+        setIsJuliaTyping(true);
 
-        const { error } = await supabase.from('messages').insert({
-            hotel_id: dbHotelId,
-            guest_id: guestId,
-            sender_type: 'guest',
-            content: msgText
+        const res = await fetch('/api/chat/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                content: msgText,
+                guestId,
+                dbHotelId,
+                hotelId
+            })
         });
 
-        if (error) {
-            console.error("Error inserting message:", error);
+        if (!res.ok) {
+            console.error('Error sending message:', await res.text());
+            setIsJuliaTyping(false);
         }
+        // The Supabase Realtime subscription will pick up both messages automatically
     };
 
     const quickActions = ["Room Service", "Limpieza", "Late Check-out"];
@@ -124,6 +135,18 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
                         </motion.div>
                     );
                 })}
+                {isJuliaTyping && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
+                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 text-stone-400 rounded-[2rem] rounded-tl-sm px-5 py-4 text-sm flex items-center gap-2">
+                            <span className="flex gap-1">
+                                <span className="w-1.5 h-1.5 bg-hotel-primary rounded-full animate-bounce [animation-delay:0ms]" />
+                                <span className="w-1.5 h-1.5 bg-hotel-primary rounded-full animate-bounce [animation-delay:150ms]" />
+                                <span className="w-1.5 h-1.5 bg-hotel-primary rounded-full animate-bounce [animation-delay:300ms]" />
+                            </span>
+                            <span>Julia está escribiendo...</span>
+                        </div>
+                    </motion.div>
+                )}
                 <div ref={messagesEndRef} />
             </div>
 
