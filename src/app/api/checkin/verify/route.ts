@@ -11,68 +11,70 @@ export async function POST(request: Request) {
         const { reservationId, roomNumber, lastName, hotelId, authUserId } = body;
 
         if (!lastName || !hotelId || !authUserId) {
-            return NextResponse.json(
-                { error: "Faltan datos requeridos" },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "Faltan datos requeridos" }, { status: 400 });
         }
-
         if (!reservationId && !roomNumber) {
-            return NextResponse.json(
-                { error: "Se requiere reservationId o roomNumber" },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "Se requiere reservationId o roomNumber" }, { status: 400 });
         }
 
         const supabase = getAdminSupabase();
 
-        const { data: hotelData, error: hotelError } = await supabase
+        // 1. Buscar hotel por slug
+        const { data: hotelData } = await supabase
             .from('hotels')
             .select('id')
             .eq('slug', hotelId)
             .single();
 
-        if (hotelError || !hotelData) {
+        if (!hotelData) {
             return NextResponse.json({ error: "Hotel no encontrado" }, { status: 404 });
         }
 
         const today = new Date().toISOString().split('T')[0];
         const ACTIVE_STATUSES = ['confirmed', 'checked_in'];
 
-        let reservation: any = null;
-        let resError: any = null;
+        // 2. Buscar reserva (sin join)
+        let reservationQuery = supabase
+            .from('reservations')
+            .select('id, status, check_in, check_out, room_number, guest_id')
+            .eq('hotel_id', hotelData.id)
+            .in('status', ACTIVE_STATUSES);
 
         if (reservationId) {
-            ({ data: reservation, error: resError } = await supabase
-                .from('reservations')
-                .select(`id, status, check_in, check_out, room_number, guests!inner(id, name)`)
-                .eq('hotel_id', hotelData.id)
-                .eq('id', reservationId.trim())
-                .in('status', ACTIVE_STATUSES)
-                .single());
+            reservationQuery = reservationQuery.eq('id', reservationId.trim());
         } else {
-            ({ data: reservation, error: resError } = await supabase
-                .from('reservations')
-                .select(`id, status, check_in, check_out, room_number, guests!inner(id, name)`)
-                .eq('hotel_id', hotelData.id)
+            reservationQuery = reservationQuery
                 .eq('room_number', roomNumber.trim())
                 .gte('check_out', today)
-                .in('status', ACTIVE_STATUSES)
                 .order('check_in', { ascending: false })
-                .limit(1)
-                .single());
+                .limit(1);
         }
 
-        if (resError || !reservation) {
+        const { data: reservation } = await reservationQuery.single();
+
+        if (!reservation) {
             return NextResponse.json(
                 { error: "No pudimos encontrar una reserva activa con esos datos" },
                 { status: 404 }
             );
         }
 
-        // guests.name es "Carlos Garcia" — comparamos contra la última palabra
-        const guestName: string = (reservation.guests as any).name ?? '';
-        const guestLastName = normalizeString(guestName.split(' ').pop() ?? guestName);
+        // 3. Buscar guest por separado
+        const { data: guest } = await supabase
+            .from('guests')
+            .select('id, name')
+            .eq('id', reservation.guest_id)
+            .single();
+
+        if (!guest) {
+            return NextResponse.json(
+                { error: "No pudimos encontrar una reserva activa con esos datos" },
+                { status: 404 }
+            );
+        }
+
+        // 4. Verificar apellido (última palabra del nombre)
+        const guestLastName = normalizeString(guest.name.split(' ').pop() ?? guest.name);
         const inputLastName = normalizeString(lastName);
 
         if (guestLastName !== inputLastName) {
@@ -82,26 +84,19 @@ export async function POST(request: Request) {
             );
         }
 
-        const { error: updateError } = await supabase
+        // 5. Vincular sesión anónima al guest
+        await supabase
             .from('guests')
             .update({ auth_user_id: authUserId })
-            .eq('id', (reservation.guests as any).id);
-
-        if (updateError) {
-            console.error("Error updating guest auth_user_id:", updateError);
-            return NextResponse.json(
-                { error: "Error al asegurar la sesión del huésped." },
-                { status: 500 }
-            );
-        }
+            .eq('id', guest.id);
 
         return NextResponse.json({
             success: true,
             reservation: {
                 id: reservation.id,
                 status: reservation.status,
-                guestName: guestName,
-                guestId: (reservation.guests as any).id,
+                guestName: guest.name,
+                guestId: guest.id,
                 roomNumber: reservation.room_number,
                 checkinDate: reservation.check_in,
                 checkoutDate: reservation.check_out,
@@ -110,9 +105,6 @@ export async function POST(request: Request) {
 
     } catch (error: any) {
         console.error("Check-in verify error:", error);
-        return NextResponse.json(
-            { error: "Ocurrió un error al verificar la reserva." },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Ocurrió un error al verificar la reserva." }, { status: 500 });
     }
 }
