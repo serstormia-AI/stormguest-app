@@ -61,21 +61,13 @@ export async function middleware(request: NextRequest) {
     if (!session) {
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = `/${hotelId}/login`;
-        // Preserve the original destination so we can redirect back after login
         loginUrl.searchParams.set('redirectTo', pathname);
         return NextResponse.redirect(loginUrl);
     }
 
-    // Tenant isolation: verify the authenticated guest belongs to THIS hotel.
-    // The hotel slug is stamped into user_metadata during login (zero extra DB queries).
-    const sessionHotelSlug: string | undefined = session.user.user_metadata?.hotelSlug;
-    if (!sessionHotelSlug || sessionHotelSlug !== hotelId) {
-        // Guest is authenticated but for a different hotel — send them to THIS hotel's login.
-        const loginUrl = request.nextUrl.clone();
-        loginUrl.pathname = `/${hotelId}/login`;
-        loginUrl.searchParams.set('redirectTo', pathname);
-        return NextResponse.redirect(loginUrl);
-    }
+    // Tenant isolation is enforced at the page level (auth_user_id lookup),
+    // not here — checking user_metadata in middleware causes a race condition
+    // immediately after anonymous sign-in before the cookie is refreshed.
 
     return response;
 }
