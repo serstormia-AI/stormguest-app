@@ -128,6 +128,7 @@ export default function GuestLoginPage({ params }: { params: Promise<{ hotelId: 
                                         onChange={(e) => setRoomNumber(e.target.value)}
                                         placeholder="Ej: 101"
                                         autoComplete="off"
+                                        autoCapitalize="characters"
                                         className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-hotel-primary focus:ring-1 focus:ring-hotel-primary transition-all placeholder:text-stone-600"
                                     />
                                 </div>
@@ -146,6 +147,7 @@ export default function GuestLoginPage({ params }: { params: Promise<{ hotelId: 
                                         onChange={(e) => setLastName(e.target.value)}
                                         placeholder="Tu apellido"
                                         autoComplete="family-name"
+                                        autoCapitalize="words"
                                         className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-hotel-primary focus:ring-1 focus:ring-hotel-primary transition-all placeholder:text-stone-600"
                                     />
                                 </div>
