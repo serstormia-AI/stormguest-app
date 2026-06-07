@@ -30,10 +30,10 @@ export default async function HotelLayout({
 
         if (!error && data) {
             hotelData = {
-                primary_color: "#C9964A",
-                primary_color_light: "#E2B96E",
-                category: "Luxury Collection",
                 ...data,
+                primary_color: data.primary_color ?? "#C9964A",
+                primary_color_light: data.primary_color_light ?? "#E2B96E",
+                category: "Luxury Collection",
             };
         }
     } catch (e) {
