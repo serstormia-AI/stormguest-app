@@ -37,16 +37,16 @@ No test suite exists. Validate changes manually via `npm run build` and the dev 
 **Rules:**
 - `supabase-server.ts` imports `next/headers` — **never import it from a Client Component**.
 - `getAdminSupabase()` uses `SUPABASE_SERVICE_ROLE_KEY` — **never put this in a `NEXT_PUBLIC_` var**.
-- Client Components must use `createBrowserSupabase()` for Realtime; never call `getAdminSupabase()` from the browser.
+- Client Components must use `createBrowserSupabase()` for Realtime. Never call `getAdminSupabase()` from the browser.
 
 ---
 
 ## RLS bypass pattern — mandatory for all pages with auth
 
-RLS policy 008 scopes tables to `hotel_id` via `current_setting('app.hotel_id')`. That setting is never populated in Next.js SSR, so any query against `guests` using the anon key returns 0 rows. Standard pattern for every authenticated Server Component:
+Standard pattern for every authenticated Server Component:
 
 ```ts
-// 1. Verify identity (SSR client is correct here — validates JWT cookie)
+// 1. Verify identity (SSR client — validates JWT cookie)
 const ssrSupabase = await createSSRSupabase();
 const { data: { user } } = await ssrSupabase.auth.getUser();
 if (!user) redirect(`/${hotelId}/login`);
@@ -63,69 +63,104 @@ if (!guest) redirect(`/${hotelId}/login`);
 
 ---
 
-## No FK constraints — never use `!inner` joins
+## No FK constraints — always two-step fetches
 
-The database has no foreign key constraints. PostgREST's `!inner` join notation silently returns empty results without FKs. Always do two separate queries and merge in JS:
+The database has no foreign key constraints. PostgREST `!inner` join syntax silently returns empty results. Always do two separate queries and merge in JS:
 
 ```ts
-// Wrong: .select('*, guests!inner(name)')
+// Wrong: .select('*, experiences!inner(title)')
 // Correct:
-const { data: reservations } = await supabase.from('reservations').select('*').eq('hotel_id', hotelId);
-const guestIds = reservations.map(r => r.guest_id);
-const { data: guests } = await supabase.from('guests').select('id, name').in('id', guestIds);
-const merged = reservations.map(r => ({ ...r, guest: guests.find(g => g.id === r.guest_id) }));
+const { data: requests } = await supabase.from('requests').select('id, experience_id').eq('guest_id', guestId);
+const expIds = [...new Set(requests.map(r => r.experience_id).filter(Boolean))];
+const { data: exps } = await supabase.from('experiences').select('id, title').in('id', expIds);
+const expMap = Object.fromEntries(exps.map(e => [e.id, e.title]));
+const merged = requests.map(r => ({ ...r, expTitle: expMap[r.experience_id] || 'Servicio' }));
 ```
 
 ---
 
-## Database column names (critical — do not guess)
+## Database schema (verified — do not guess column names)
 
-| Table | Correct columns | Wrong (do not use) |
-|-------|----------------|--------------------|
-| `guests` | `name`, `email`, `hotel_id`, `auth_user_id`, `nationality`, `document_number`, `signature`, `notes` | `first_name`, `last_name` |
-| `reservations` | `room_number`, `check_in`, `check_out`, `status`, `guest_id`, `hotel_id` | `checkin_date`, `checkout_date` |
-| `messages` | `hotel_id`, `guest_id`, `sender_type`, `content`, `created_at` | — |
-| `hotels` | `id`, `slug`, `name`, `primary_color`, `primary_color_light` | — |
-| `experiences` | `id`, `hotel_id`, `title`, `description`, `price`, `currency`, `image_url`, `is_active` | — |
-| `requests` | `hotel_id`, `guest_id`, `experience_id`, `total_price`, `status` | — |
+| Table | Columns | Notes |
+|-------|---------|-------|
+| `hotels` | `id` (uuid), `slug` (text), `name`, `primary_color`, `primary_color_light`, `logo_url` | `primary_color` defaults `'#C9964A'` |
+| `guests` | `id` (uuid), `hotel_id` (uuid), `auth_user_id` (uuid), `name`, `email`, `nationality`, `document_number`, `signature`, `notes` | — |
+| `reservations` | `id` (uuid), `hotel_id` (uuid), `guest_id` (uuid), `room_number`, `check_in`, `check_out`, `status` | status: `'pending'`\|`'checked_in'`\|`'checked_out'` |
+| `conversations` | `id` (uuid), `hotel_id` (**text**), `guest_id` (uuid), `channel`, `status`, `created_at`, `updated_at` | hotel_id is TEXT (stores UUID as string) |
+| `messages` | `id` (uuid), `conversation_id` (uuid), `sender` (text), `content`, `created_at` | sender: `'guest'`\|`'staff'`\|`'bot'` — NO hotel_id, NO guest_id directly |
+| `experiences` | `id` (uuid), `hotel_id` (uuid), `title`, `description`, `price` (numeric), `image_url`, `created_at` | NO currency, NO is_active columns |
+| `requests` | `id` (uuid), `hotel_id` (uuid), `guest_id` (uuid), `experience_id` (uuid), `total_price` (numeric), `status`, `created_at` | status: `'pending'`\|`'approved'`\|`'rejected'` |
+| `reviews` | `id` (uuid), `hotel_id` (**text**), `guest_id` (uuid), `reservation_id` (uuid), `rating` (integer), `comment`, `created_at` | hotel_id is TEXT |
 
-`sender_type` values: `'guest'` | `'staff'` | `'bot'`
-`reservations.status` values: `'pending'` | `'confirmed'` | `'checked_in'` | `'checked_out'`
+**Critical:** `messages` does NOT have `hotel_id`, `guest_id`, or `sender_type`. Messages are linked to guests through `conversations`.
+
+---
+
+## Chat architecture — conversations → messages
+
+Messages are nested under conversations. Never query messages directly by `guest_id` or `hotel_id`.
+
+```ts
+// Step 1: find or create conversation
+const { data: conv } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('guest_id', guestId)
+    .eq('hotel_id', dbHotelId)   // dbHotelId is UUID stored as text
+    .maybeSingle();
+
+// Step 2: fetch messages by conversation_id
+const { data: messages } = await supabase
+    .from('messages')
+    .select('id, sender, content, created_at')
+    .eq('conversation_id', conv.id)
+    .order('created_at', { ascending: true });
+
+// Realtime filter uses conversation_id, not guest_id
+const channel = supabase.channel(`chat-conv-${conv.id}`)
+    .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'messages',
+        filter: `conversation_id=eq.${conv.id}`
+    }, handler).subscribe();
+```
+
+The `/api/chat/message` route does find-or-create on conversations, then inserts with `{ conversation_id, sender: 'guest'|'bot', content }`.
 
 ---
 
 ## Auth flow
 
-1. Guest hits `/{hotelId}/*` → middleware (`src/middleware.ts`) checks session → redirects to `/{hotelId}/login` if none
+1. Guest hits `/{hotelId}/*` → middleware checks session → redirects to `/{hotelId}/login` if none
 2. Login page: `supabase.auth.signInAnonymously()` → POST `/api/checkin/verify` (validates room + last name, sets `guests.auth_user_id = user.id`) → `auth.refreshSession()` → redirect to dashboard
 3. Every page re-verifies via `getUser()` (SSR client) + admin client guest lookup
-4. Middleware only checks session existence — tenant isolation enforced at page level (middleware race condition: cookie not yet refreshed after anonymous sign-in)
+4. Unknown hotel slug → `notFound()` in `[hotelId]/layout.tsx`
 
 ---
 
 ## API routes
 
-All DB writes go through API routes using `getAdminSupabase()`. Never write to Supabase from browser code.
-
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `/api/checkin/verify` | POST | Validates room + last name → sets `guests.auth_user_id` |
-| `/api/checkin/complete` | POST | Updates `guests` with nationality/document/signature, sets `reservations.status = 'checked_in'` |
-| `/api/chat/message` | POST | Inserts guest message → fetches last 10 msgs → calls Claude Haiku → inserts bot reply |
-| `/api/experiences/request` | POST | Inserts into `requests` table with `status: 'pending'` |
+| `/api/checkin/complete` | POST | Updates guest with nationality/document/signature, sets `reservations.status = 'checked_in'` |
+| `/api/chat/message` | POST | Find-or-create conversation → insert guest msg → call Claude Haiku → insert bot reply |
+| `/api/experiences/request` | POST | Inserts into `requests` with `status: 'pending'` |
 
 ---
 
 ## Julia AI (Anthropic Claude Haiku)
 
-`/api/chat/message/route.ts` calls Anthropic directly:
+`/api/chat/message/route.ts` — finds/creates conversation, inserts guest message, fetches last 10 messages, calls Claude:
 
 ```ts
 const claudeResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 300,
     system: systemPrompt,  // Julia persona, hotel name injected
-    messages,              // last 10 messages, mapped to {role, content}
+    messages: conversationHistory.map(msg => ({
+        role: msg.sender === 'guest' ? 'user' : 'assistant',
+        content: msg.content,
+    })),
 });
 ```
 
@@ -138,48 +173,75 @@ The API key is `ANTHROPIC_API_KEY` (server-only, never `NEXT_PUBLIC_`).
 | File | Type | Description |
 |------|------|-------------|
 | `src/middleware.ts` | Middleware | Session guard for all `/{hotelId}/*` routes |
-| `src/app/[hotelId]/layout.tsx` | Server | Fetches hotel `primary_color`/`primary_color_light`, injects CSS vars for theming |
-| `src/app/[hotelId]/page.tsx` | Server | Auth → admin guest lookup → reservation → renders `<GuestDashboardClient>` |
+| `src/app/[hotelId]/layout.tsx` | Server | Fetches hotel theming, injects CSS vars. Calls `notFound()` for unknown slugs |
+| `src/app/[hotelId]/page.tsx` | Server | Auth → guest → reservation → experiences (no `is_active` filter) → `<GuestDashboardClient>` |
 | `src/app/[hotelId]/login/page.tsx` | Client | Anonymous sign-in + room/name verification |
-| `src/app/[hotelId]/chat/page.tsx` | Server | Auth → admin guest lookup → renders `<ChatClient>` |
-| `src/app/[hotelId]/chat/ChatClient.tsx` | Client | Realtime messages, Julia typing indicator, sends via `/api/chat/message` |
-| `src/app/[hotelId]/checkin/page.tsx` | Server | Auth → admin guest lookup → active reservation → renders `<CheckinClient>` |
-| `src/app/[hotelId]/checkin/CheckinClient.tsx` | Client | 2-step flow: identity confirm → nationality/document/signature canvas → POST `/api/checkin/complete` |
-| `src/app/[hotelId]/profile/page.tsx` | Server | Shows guest name, email, reservation check-out |
-| `src/components/GuestDashboardClient.tsx` | Client | Hero greeting, room card, check-out card, check-in link, experiences catalog with purchase modal |
+| `src/app/[hotelId]/chat/page.tsx` | Server | Auth → guest → `<ChatClient>` |
+| `src/app/[hotelId]/chat/ChatClient.tsx` | Client | Finds conversation, Realtime on `conversation_id`, sends via `/api/chat/message` |
+| `src/app/[hotelId]/checkin/page.tsx` | Server | Auth → guest → reservation → `<CheckinClient>` |
+| `src/app/[hotelId]/checkin/CheckinClient.tsx` | Client | 2-step: identity confirm → nationality/document/signature → POST `/api/checkin/complete` |
+| `src/app/[hotelId]/profile/page.tsx` | Server | Auth → guest → reservation (with id) → hotel UUID → renders GuestRequestsClient + GuestReviewForm |
+| `src/components/GuestDashboardClient.tsx` | Client | Greeting, stay cards, Julia card, **GuestRequestsClient (compact)**, experiences catalog, check-in link |
+| `src/components/GuestRequestsClient.tsx` | Client | Real-time requests list. `compact` prop for dashboard card vs full profile view. Realtime on `guest_id` |
+| `src/components/GuestReviewForm.tsx` | Client | Star picker (1-5) + comment textarea. Saves to `reviews` via browser Supabase client |
 | `src/components/LogoutButton.tsx` | Client | `signOut()` → `router.replace('/{hotelId}/login')` |
-| `src/components/BottomNav.tsx` | Client | Mobile bottom nav (Home, Chat, Check-in, Profile) |
-| `src/lib/supabase.ts` | Lib | Exports `supabase`, `createBrowserSupabase()`, `getAdminSupabase()` |
-| `src/lib/supabase-server.ts` | Lib | Exports `createSSRSupabase()` — server only |
+| `src/components/BottomNav.tsx` | Client | Mobile bottom nav (Home, Chat, Profile) |
+
+---
+
+## RLS policies in Supabase (must exist for guest browser client to work)
+
+| Policy | Table | Effect |
+|--------|-------|--------|
+| `messages_guest_select` | `messages` | Authenticated guests can SELECT messages where `conversation_id` belongs to their `guest_id` |
+| `guests_read_own_requests` | `requests` | Authenticated guests can SELECT requests where `guest_id = auth.uid() guest record` |
+| `guests_insert_own_review` | `reviews` | Authenticated guests can INSERT reviews for their own `guest_id` |
+
+```sql
+-- messages_guest_select
+CREATE POLICY "messages_guest_select" ON public.messages FOR SELECT TO authenticated
+USING (conversation_id IN (
+  SELECT id FROM public.conversations
+  WHERE guest_id = (SELECT id FROM public.guests WHERE auth_user_id = auth.uid() LIMIT 1)
+));
+
+-- guests_read_own_requests
+CREATE POLICY "guests_read_own_requests" ON public.requests FOR SELECT TO authenticated
+USING (guest_id = (SELECT id FROM public.guests WHERE auth_user_id = auth.uid() LIMIT 1));
+
+-- guests_insert_own_review
+CREATE POLICY "guests_insert_own_review" ON public.reviews FOR INSERT TO authenticated
+WITH CHECK (guest_id = (SELECT id FROM public.guests WHERE auth_user_id = auth.uid() LIMIT 1));
+```
 
 ---
 
 ## Multi-tenant theming
 
-`[hotelId]/layout.tsx` fetches `hotels.primary_color` and `hotels.primary_color_light` from DB and injects them via inline `<style>`:
+`[hotelId]/layout.tsx` fetches `hotels.primary_color` and `hotels.primary_color_light` and injects as CSS vars. Defaults: `#C9964A` / `#E2B96E`.
 
-```html
-<style>:root { --hotel-primary: #value; --hotel-primary-light: #value; }</style>
+```ts
+hotelData = {
+    ...data,
+    primary_color: data.primary_color ?? "#C9964A",
+    primary_color_light: data.primary_color_light ?? "#E2B96E",
+};
 ```
 
-All UI uses `text-hotel-primary`, `bg-hotel-primary`, etc. (defined in `globals.css` via `@theme inline`). Never hardcode hex colors in components.
+All UI uses `var(--hotel-primary)` and `var(--hotel-primary-light)`. Never hardcode gold hex in components.
 
 ---
 
-## Chat / Realtime pattern
+## Framer Motion — TypeScript gotcha
 
-`ChatClient.tsx` (Client Component) subscribes to Supabase Realtime filtered by `guest_id`:
+Always import `type Variants` to avoid TypeScript errors with `transition` inside variant objects:
 
 ```ts
-const channel = supabase.channel(`chat-${guestId}`)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages',
-        filter: `guest_id=eq.${guestId}` }, (payload) => {
-        setMessages(prev => [...prev, payload.new]);
-        if (payload.new.sender_type !== 'guest') setIsJuliaTyping(false);
-    }).subscribe();
+import { motion, AnimatePresence, type Variants } from "framer-motion";
+const fadeUp: Variants = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0, transition: { duration: 0.45 } } };
 ```
 
-Guest sends → `POST /api/chat/message` → server inserts guest msg + Claude reply → Realtime delivers both. `isJuliaTyping` shows animated dots between send and bot reply arrival.
+Do **not** use `ease: [0.22, 1, 0.36, 1]` (array) inside variants — use `ease: "easeOut"` or omit it.
 
 ---
 
@@ -192,4 +254,4 @@ SUPABASE_SERVICE_ROLE_KEY        # Service role — server only, NEVER NEXT_PUBL
 ANTHROPIC_API_KEY                # Claude API key — server only
 ```
 
-All four must be set in Vercel project settings (Settings → Environment Variables). The GitHub repo **must remain private** — GitHub auto-revokes PATs found in public repo history.
+All four must be set in Vercel. The GitHub repo **must remain private** — GitHub auto-revokes PATs found in public repo history.
