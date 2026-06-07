@@ -9,113 +9,115 @@ const anthropic = new Anthropic({
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { content, guestId, dbHotelId, hotelId } = body as {
+        const { content, guestId, dbHotelId } = body as {
             content: string;
             guestId: string;
             dbHotelId: string;
-            hotelId: string;
         };
 
-        if (!content || !guestId || !dbHotelId || !hotelId) {
+        if (!content || !guestId || !dbHotelId) {
             return NextResponse.json(
-                { error: "Faltan campos requeridos: content, guestId, dbHotelId, hotelId" },
+                { error: "Faltan campos requeridos: content, guestId, dbHotelId" },
                 { status: 400 }
             );
         }
 
         const supabase = getAdminSupabase();
 
-        // 1. Insert the guest message
+        // 1. Find or create conversation for this guest + hotel
+        let convId: string;
+        const { data: existing } = await supabase
+            .from("conversations")
+            .select("id")
+            .eq("guest_id", guestId)
+            .eq("hotel_id", dbHotelId)
+            .maybeSingle();
+
+        if (existing) {
+            convId = existing.id;
+        } else {
+            const { data: newConv, error: convErr } = await supabase
+                .from("conversations")
+                .insert({ guest_id: guestId, hotel_id: dbHotelId, channel: "app", status: "open" })
+                .select("id")
+                .single();
+            if (convErr || !newConv) {
+                console.error("Error creating conversation:", convErr);
+                return NextResponse.json({ error: "No se pudo crear la conversación" }, { status: 500 });
+            }
+            convId = newConv.id;
+        }
+
+        // 2. Insert guest message
         const { error: insertGuestError } = await supabase.from("messages").insert({
-            hotel_id: dbHotelId,
-            guest_id: guestId,
-            sender_type: "guest",
+            conversation_id: convId,
+            sender: "guest",
             content,
         });
 
         if (insertGuestError) {
             console.error("Error inserting guest message:", insertGuestError);
-            return NextResponse.json(
-                { error: "No se pudo guardar el mensaje del huésped" },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: "No se pudo guardar el mensaje" }, { status: 500 });
         }
 
-        // 2. Fetch last 10 messages for context (after the insert so the new one is included)
-        const { data: recentMessages, error: fetchError } = await supabase
+        // 3. Fetch last 10 messages for Claude context
+        const { data: recentMessages } = await supabase
             .from("messages")
-            .select("sender_type, content")
-            .eq("hotel_id", dbHotelId)
-            .eq("guest_id", guestId)
+            .select("sender, content")
+            .eq("conversation_id", convId)
             .order("created_at", { ascending: false })
             .limit(10);
 
-        if (fetchError) {
-            console.error("Error fetching messages:", fetchError);
-            return NextResponse.json(
-                { error: "No se pudo obtener el historial de mensajes" },
-                { status: 500 }
-            );
-        }
-
         const conversationHistory = (recentMessages ?? []).reverse();
 
-        // 3. Fetch hotel name
-        const { data: hotelData, error: hotelError } = await supabase
+        // 4. Fetch hotel name
+        const { data: hotelData } = await supabase
             .from("hotels")
             .select("name")
             .eq("id", dbHotelId)
             .single();
 
-        if (hotelError || !hotelData) {
-            console.error("Error fetching hotel:", hotelError);
-            return NextResponse.json(
-                { error: "Hotel no encontrado" },
-                { status: 404 }
-            );
-        }
+        const hotelName = (hotelData?.name as string) ?? "el hotel";
 
-        const hotelName = hotelData.name as string;
-
-        // 4. Call Anthropic Claude
+        // 5. Call Claude Haiku
         const systemPrompt = `Eres Julia, la Concierge Digital del ${hotelName}. Eres cálida, profesional y servicial.
 Respuestas breves (1-3 oraciones). Siempre en español.
-Puedes ayudar con: room service, limpieza, late check-out, información del hotel,
+Podés ayudar con: room service, limpieza, late check-out, información del hotel,
 recomendaciones locales, solicitar amenities.
-Cuando el huésped pide algo concreto (ej: toallas, desayuno), confirma que lo gestionas
-de inmediato y dile el tiempo estimado (ej: "En 15 minutos estará en tu habitación.").`;
+Cuando el huésped pide algo concreto (ej: toallas, desayuno), confirmá que lo gestionás
+de inmediato y decile el tiempo estimado (ej: "En 15 minutos estará en tu habitación.").`;
 
-        const messages: Anthropic.MessageParam[] = conversationHistory.map((msg) => ({
-            role: msg.sender_type === "guest" ? "user" : "assistant",
+        const claudeMessages: Anthropic.MessageParam[] = conversationHistory.map((msg) => ({
+            role: msg.sender === "guest" ? "user" : "assistant",
             content: msg.content as string,
         }));
+
+        // Ensure conversation starts with a user message
+        const validMessages = claudeMessages.length > 0 && claudeMessages[0].role === "user"
+            ? claudeMessages
+            : [{ role: "user" as const, content }];
 
         const claudeResponse = await anthropic.messages.create({
             model: "claude-haiku-4-5-20251001",
             max_tokens: 300,
             system: systemPrompt,
-            messages,
+            messages: validMessages,
         });
 
         const responseText =
             claudeResponse.content[0].type === "text"
                 ? claudeResponse.content[0].text
-                : "";
+                : "Disculpá, no pude procesar tu mensaje. ¿Podés repetirlo?";
 
-        // 5. Insert the bot response
+        // 6. Insert bot response
         const { error: insertBotError } = await supabase.from("messages").insert({
-            hotel_id: dbHotelId,
-            guest_id: guestId,
-            sender_type: "bot",
+            conversation_id: convId,
+            sender: "bot",
             content: responseText,
         });
 
         if (insertBotError) {
             console.error("Error inserting bot message:", insertBotError);
-            return NextResponse.json(
-                { error: "No se pudo guardar la respuesta de Julia" },
-                { status: 500 }
-            );
         }
 
         return NextResponse.json({ success: true });

@@ -7,7 +7,7 @@ import { createBrowserSupabase } from "@/lib/supabase";
 
 type Message = {
     id: string;
-    sender_type: "guest" | "staff" | "bot";
+    sender: "guest" | "staff" | "bot";
     content: string;
     created_at: string;
 };
@@ -27,36 +27,60 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(true);
     const [isTyping, setIsTyping] = useState(false);
+    const [convId, setConvId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => { fetchMessages(); }, []);
 
+    // Realtime — scoped to conversation_id once we have it
     useEffect(() => {
+        if (!convId) return;
+
         const channel = supabase
-            .channel(`chat-${guestId}`)
+            .channel(`chat-conv-${convId}`)
             .on('postgres_changes', {
                 event: 'INSERT', schema: 'public', table: 'messages',
-                filter: `guest_id=eq.${guestId}`
+                filter: `conversation_id=eq.${convId}`
             }, (payload) => {
                 const msg = payload.new as Message;
                 setMessages(prev => {
                     if (prev.some(m => m.id === msg.id)) return prev;
                     return [...prev, msg];
                 });
-                if (msg.sender_type !== 'guest') setIsTyping(false);
+                if (msg.sender !== 'guest') setIsTyping(false);
                 scrollToBottom();
             })
             .subscribe();
+
         return () => { supabase.removeChannel(channel); };
-    }, [guestId]);
+    }, [convId]);
 
     const fetchMessages = async () => {
+        // Step 1: find conversation for this guest + hotel
+        const { data: conv } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('guest_id', guestId)
+            .eq('hotel_id', dbHotelId)
+            .maybeSingle();
+
+        if (!conv) {
+            // No conversation yet — nothing to show, wait for first message
+            setLoading(false);
+            return;
+        }
+
+        setConvId(conv.id);
+
+        // Step 2: fetch messages for this conversation
         const { data } = await supabase
-            .from('messages').select('id, sender_type, content, created_at')
-            .eq('hotel_id', dbHotelId).eq('guest_id', guestId)
+            .from('messages')
+            .select('id, sender, content, created_at')
+            .eq('conversation_id', conv.id)
             .order('created_at', { ascending: true });
-        if (data) setMessages(data);
+
+        if (data) setMessages(data as Message[]);
         setLoading(false);
         scrollToBottom();
     };
@@ -76,7 +100,16 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content, guestId, dbHotelId, hotelId })
         });
-        if (!res.ok) setIsTyping(false);
+
+        if (!res.ok) {
+            setIsTyping(false);
+            return;
+        }
+
+        // If we didn't have a convId yet, re-fetch to get it
+        if (!convId) {
+            await fetchMessages();
+        }
     };
 
     return (
@@ -92,7 +125,6 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
                 <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 relative"
                     style={{ background: 'linear-gradient(135deg, rgba(201,150,74,0.2) 0%, rgba(201,150,74,0.08) 100%)', border: '1px solid rgba(201,150,74,0.3)' }}>
                     <Sparkles className="w-5 h-5" style={{ color: 'var(--hotel-primary)' }} />
-                    {/* Online dot */}
                     <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#080808]"
                         style={{ background: '#10b981' }} />
                 </div>
@@ -135,8 +167,8 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
                 ) : (
                     <AnimatePresence initial={false}>
                         {messages.map((msg) => {
-                            const isGuest = msg.sender_type === 'guest';
-                            const isBot = msg.sender_type === 'bot';
+                            const isGuest = msg.sender === 'guest';
+                            const isBot = msg.sender === 'bot';
                             return (
                                 <motion.div
                                     key={msg.id}
@@ -145,7 +177,6 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
                                     transition={{ duration: 0.25 }}
                                     className={`flex items-end gap-2 ${isGuest ? 'justify-end' : 'justify-start'}`}
                                 >
-                                    {/* Julia avatar — only for bot */}
                                     {isBot && (
                                         <div className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mb-0.5"
                                             style={{ background: 'rgba(201,150,74,0.15)', border: '1px solid rgba(201,150,74,0.25)' }}>
