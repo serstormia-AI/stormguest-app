@@ -6,6 +6,7 @@ import { MessageSquare, Sparkles, KeyRound, ChevronRight, X, Loader2, ClipboardC
 import Link from "next/link";
 import { createBrowserSupabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import GuestRequestsClient from "@/components/GuestRequestsClient";
 
 function getGreeting() {
     const h = new Date().getHours();
@@ -169,7 +170,12 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
                     </button>
                 </motion.div>
 
-                {/* ── 4. Experiences catalog ── */}
+                {/* ── 4. Mis pedidos (compact, real-time) ── */}
+                <motion.div variants={fadeUp}>
+                    <GuestRequestsClient guestId={guestId} compact />
+                </motion.div>
+
+                {/* ── 5. Experiences catalog ── */}
                 {experiences.length > 0 && (
                     <motion.div variants={fadeUp} className="space-y-4 pt-2">
                         <div className="flex items-end justify-between">
