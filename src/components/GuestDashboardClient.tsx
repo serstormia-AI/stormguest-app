@@ -24,7 +24,6 @@ type Experience = {
     id: string;
     title: string;
     price: number;
-    currency: string;
     description: string;
     image_url: string;
 };
@@ -314,7 +313,7 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
                                             <p className="font-heading text-2xl font-bold text-white">
                                                 ${selectedExp.price}
                                                 <span className="text-sm font-normal ml-1" style={{ color: 'rgba(240,235,227,0.4)' }}>
-                                                    {selectedExp.currency}
+                                                    ARS
                                                 </span>
                                             </p>
                                         </div>

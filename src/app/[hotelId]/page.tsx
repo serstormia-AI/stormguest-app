@@ -42,9 +42,8 @@ export default async function GuestDashboardPage({ params }: { params: Promise<{
     if (hotelData) {
         const { data: expData } = await supabase
             .from('experiences')
-            .select('*')
+            .select('id, title, description, price, image_url')
             .eq('hotel_id', hotelData.id)
-            .eq('is_active', true)
             .order('created_at', { ascending: false });
 
         if (expData) {
