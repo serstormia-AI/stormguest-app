@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, AlertCircle, Loader2, Trash2 } from "lucide-react";
@@ -19,16 +19,15 @@ export default function CheckinClient({ hotelId, guestId, guestName, reservation
     const [step, setStep] = useState(alreadyCheckedIn ? 3 : 1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    // Step 2 — legal data
     const [nationality, setNationality] = useState("");
     const [documentNumber, setDocumentNumber] = useState("");
 
-    // Signature canvas
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [hasSigned, setHasSigned] = useState(false);
     const lastPos = useRef<{ x: number; y: number } | null>(null);
+
+    const firstName = guestName.split(' ')[0] || 'Huésped';
 
     useEffect(() => {
         if (step !== 2 || !canvasRef.current) return;
@@ -42,249 +41,251 @@ export default function CheckinClient({ hotelId, guestId, guestName, reservation
         const canvas = canvasRef.current;
         if (!canvas) return { x: 0, y: 0 };
         const rect = canvas.getBoundingClientRect();
-        if ("touches" in e) {
-            return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
-        }
+        if ("touches" in e) return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
         return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top };
     };
 
     const startDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-        e.preventDefault();
-        setIsDrawing(true);
-        lastPos.current = getPos(e);
+        e.preventDefault(); setIsDrawing(true); lastPos.current = getPos(e);
     };
-
     const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
         e.preventDefault();
         if (!isDrawing || !canvasRef.current) return;
         const ctx = canvasRef.current.getContext("2d");
         if (!ctx) return;
         const pos = getPos(e);
-        ctx.beginPath();
-        ctx.moveTo(lastPos.current!.x, lastPos.current!.y);
-        ctx.lineTo(pos.x, pos.y);
-        ctx.strokeStyle = "#1a1a1a";
-        ctx.lineWidth = 2.5;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.stroke();
-        lastPos.current = pos;
-        setHasSigned(true);
+        ctx.beginPath(); ctx.moveTo(lastPos.current!.x, lastPos.current!.y);
+        ctx.lineTo(pos.x, pos.y); ctx.strokeStyle = "#1a1a1a";
+        ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
+        lastPos.current = pos; setHasSigned(true);
     };
-
     const endDraw = () => { setIsDrawing(false); lastPos.current = null; };
-
-    const clearSignature = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+    const clearCanvas = () => {
+        canvasRef.current?.getContext("2d")?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         setHasSigned(false);
     };
 
     const handleFinish = async () => {
-        if (!nationality || !documentNumber) {
-            setError("Completá tu nacionalidad y número de documento.");
-            return;
-        }
-        if (!hasSigned) {
-            setError("Firma en el recuadro antes de continuar.");
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
-
+        if (!nationality || !documentNumber) { setError("Completá tu nacionalidad y documento."); return; }
+        if (!hasSigned) { setError("Firma en el recuadro antes de continuar."); return; }
+        setLoading(true); setError(null);
         const signatureBase64 = canvasRef.current?.toDataURL("image/png") ?? null;
-
         const res = await fetch("/api/checkin/complete", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                guestId,
-                reservationId,
-                nationality,
-                documentNumber,
-                signature: signatureBase64,
-            }),
+            body: JSON.stringify({ guestId, reservationId, nationality, documentNumber, signature: signatureBase64 }),
         });
-
         setLoading(false);
-
-        if (res.ok) {
-            setStep(3);
-        } else {
-            const data = await res.json();
-            setError(data.error || "Error al guardar. Intentá de nuevo.");
-        }
+        if (res.ok) setStep(3);
+        else { const d = await res.json(); setError(d.error || "Error al guardar. Intentá de nuevo."); }
     };
 
     return (
-        <div className="flex-1 flex flex-col p-6 items-center justify-center max-w-md mx-auto w-full">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full space-y-8">
+        <div className="flex-1 flex flex-col relative min-h-screen">
+            {/* Background */}
+            <div className="fixed inset-0 bg-[#080808] -z-20" />
+            <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full pointer-events-none -z-10"
+                style={{ background: 'radial-gradient(circle, var(--hotel-primary) 0%, transparent 70%)', opacity: 0.04 }} />
+
+            <div className="flex-1 flex flex-col px-5 pt-6 pb-10 max-w-md mx-auto w-full">
 
                 {/* Header */}
-                <div className="text-center space-y-2">
-                    <h2 className="font-heading text-3xl font-bold text-white">Check-in Digital</h2>
-                    <p className="text-stone-400 text-sm">Evitá la fila en recepción.</p>
+                <div className="mb-8">
+                    <p className="text-[11px] tracking-[0.2em] uppercase mb-1" style={{ color: 'var(--hotel-primary)' }}>
+                        Registro digital
+                    </p>
+                    <h2 className="font-heading text-[2rem] font-bold text-white leading-tight">Check-in</h2>
                 </div>
 
-                {/* Steps */}
+                {/* Step indicator */}
                 {step < 3 && (
-                    <div className="flex items-center justify-center space-x-4">
+                    <div className="flex items-center gap-2 mb-8">
                         {[1, 2].map((i) => (
-                            <div key={i} className="flex items-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                                    step >= i ? "bg-hotel-primary text-white" : "bg-white/5 text-stone-500"
-                                }`}>
-                                    {step > i ? <CheckCircle2 className="w-4 h-4" /> : i}
+                            <div key={i} className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+                                    style={{
+                                        background: step >= i ? 'var(--hotel-primary)' : 'rgba(255,255,255,0.07)',
+                                        color: step >= i ? '#080808' : 'rgba(240,235,227,0.3)',
+                                        border: step >= i ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                                    }}>
+                                    {step > i ? <CheckCircle2 className="w-3.5 h-3.5" /> : i}
                                 </div>
-                                {i < 2 && <div className={`w-16 h-0.5 mx-2 ${step > i ? "bg-hotel-primary" : "bg-white/5"}`} />}
+                                {i < 2 && (
+                                    <div className="w-12 h-px" style={{ background: step > i ? 'var(--hotel-primary)' : 'rgba(255,255,255,0.08)' }} />
+                                )}
                             </div>
                         ))}
+                        <p className="text-xs ml-2" style={{ color: 'rgba(240,235,227,0.3)' }}>
+                            {step === 1 ? 'Confirmación' : 'Tus datos'}
+                        </p>
                     </div>
                 )}
 
-                <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
+                {/* Card container */}
+                <div className="flex-1">
+                    <AnimatePresence mode="wait">
 
-                    {/* Step 1: Confirm identity */}
-                    {step === 1 && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 text-center py-4">
-                            <div className="w-16 h-16 bg-hotel-primary/20 rounded-full flex items-center justify-center mx-auto text-hotel-primary">
-                                <CheckCircle2 className="w-8 h-8" />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-white">¡Hola, {guestName.split(' ')[0]}!</h3>
-                                {roomNumber && (
-                                    <p className="text-stone-400 mt-1">Habitación <span className="text-hotel-primary font-bold">{roomNumber}</span></p>
-                                )}
-                                <p className="text-stone-500 text-sm mt-3">Completá tu registro para agilizar la llegada al hotel.</p>
-                            </div>
-                            <button
-                                onClick={() => setStep(2)}
-                                className="w-full bg-hotel-primary text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95"
-                            >
-                                Continuar <ArrowRight className="w-5 h-5" />
-                            </button>
-                        </motion.div>
-                    )}
+                        {/* Step 1: Confirm identity */}
+                        {step === 1 && (
+                            <motion.div key="step1"
+                                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.3 }}
+                                className="rounded-3xl p-7 text-center space-y-6"
+                                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
 
-                    {/* Step 2: Legal data + signature */}
-                    {step === 2 && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
-                            <div className="text-center">
-                                <h3 className="text-xl font-bold text-white">Tus datos</h3>
-                                <p className="text-stone-400 text-sm mt-1">Requerimiento legal hotelero.</p>
-                            </div>
-
-                            {error && (
-                                <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-sm flex items-start gap-2">
-                                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                                    <span>{error}</span>
+                                <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center"
+                                    style={{ background: 'rgba(201,150,74,0.12)', border: '1px solid rgba(201,150,74,0.25)' }}>
+                                    <CheckCircle2 className="w-8 h-8" style={{ color: 'var(--hotel-primary)' }} />
                                 </div>
-                            )}
 
-                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2 block">Nacionalidad</label>
-                                    <select
-                                        value={nationality}
-                                        onChange={(e) => setNationality(e.target.value)}
-                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:border-hotel-primary transition-all appearance-none"
-                                    >
-                                        <option value="">País...</option>
-                                        <option value="AR">Argentina</option>
-                                        <option value="BR">Brasil</option>
-                                        <option value="CL">Chile</option>
-                                        <option value="UY">Uruguay</option>
-                                        <option value="PY">Paraguay</option>
-                                        <option value="BO">Bolivia</option>
-                                        <option value="PE">Perú</option>
-                                        <option value="CO">Colombia</option>
-                                        <option value="MX">México</option>
-                                        <option value="US">EEUU</option>
-                                        <option value="ES">España</option>
-                                        <option value="OT">Otra</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2 block">DNI / Pasaporte</label>
-                                    <input
-                                        type="text"
-                                        value={documentNumber}
-                                        onChange={(e) => setDocumentNumber(e.target.value)}
-                                        placeholder="Nº documento"
-                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:border-hotel-primary transition-all placeholder:text-stone-600"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Signature */}
-                            <div>
-                                <label className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2 block">Firma Digital</label>
-                                <div className="bg-white rounded-2xl relative overflow-hidden border border-white/10" style={{ height: "128px" }}>
-                                    <canvas
-                                        ref={canvasRef}
-                                        className="absolute inset-0 w-full h-full touch-none cursor-crosshair"
-                                        onMouseDown={startDraw}
-                                        onMouseMove={draw}
-                                        onMouseUp={endDraw}
-                                        onMouseLeave={endDraw}
-                                        onTouchStart={startDraw}
-                                        onTouchMove={draw}
-                                        onTouchEnd={endDraw}
-                                    />
-                                    {!hasSigned && (
-                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                            <span className="text-stone-400 font-medium opacity-40 select-none">Firma aquí</span>
-                                        </div>
+                                    <h3 className="font-heading text-2xl font-bold text-white">¡Hola, {firstName}!</h3>
+                                    {roomNumber && (
+                                        <p className="mt-1" style={{ color: 'rgba(240,235,227,0.5)' }}>
+                                            Habitación <span className="font-bold" style={{ color: 'var(--hotel-primary)' }}>{roomNumber}</span>
+                                        </p>
                                     )}
-                                    <button
-                                        type="button"
-                                        onClick={clearSignature}
-                                        className="absolute bottom-2 right-2 z-10 flex items-center gap-1 text-[10px] uppercase font-bold text-stone-500 hover:text-red-500 bg-stone-100 hover:bg-red-50 px-2 py-1 rounded transition-colors"
-                                    >
-                                        <Trash2 className="w-3 h-3" /> Limpiar
-                                    </button>
+                                    <p className="text-sm mt-3" style={{ color: 'rgba(240,235,227,0.35)' }}>
+                                        Completá tu registro para agilizar la llegada al hotel.
+                                    </p>
                                 </div>
-                                <p className="text-[10px] text-stone-500 mt-2 text-center">Al firmar aceptás los términos y condiciones del hotel.</p>
-                            </div>
 
-                            <button
-                                onClick={handleFinish}
-                                disabled={loading}
-                                className="w-full bg-hotel-primary text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 mt-2"
-                            >
-                                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Finalizar Check-in <ArrowRight className="w-5 h-5" /></>}
-                            </button>
-                        </motion.div>
-                    )}
+                                <button onClick={() => setStep(2)}
+                                    className="w-full py-4 rounded-2xl font-heading font-bold text-[15px] tracking-wide flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                                    style={{ background: 'var(--hotel-primary)', color: '#080808' }}>
+                                    Continuar <ArrowRight className="w-4 h-4" />
+                                </button>
+                            </motion.div>
+                        )}
 
-                    {/* Step 3: Success */}
-                    {step === 3 && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-10 space-y-6">
-                            <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto text-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
-                                <CheckCircle2 className="w-10 h-10" />
-                            </div>
-                            <div>
-                                <h3 className="font-heading text-2xl font-bold text-white mb-2">
-                                    {alreadyCheckedIn ? '¡Ya estás registrado!' : '¡Todo listo!'}
-                                </h3>
-                                <p className="text-stone-400">
-                                    {alreadyCheckedIn
-                                        ? 'Tu check-in digital ya fue completado.'
-                                        : 'Tu check-in se completó. Solo pasá a retirar tu llave física en recepción.'}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => router.replace(`/${hotelId}`)}
-                                className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-4 rounded-xl transition-all"
-                            >
-                                Volver al inicio
-                            </button>
-                        </motion.div>
-                    )}
+                        {/* Step 2: Legal data */}
+                        {step === 2 && (
+                            <motion.div key="step2"
+                                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.3 }}
+                                className="space-y-5">
+
+                                {error && (
+                                    <div className="flex items-start gap-2.5 p-3.5 rounded-2xl text-sm"
+                                        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#FCA5A5' }}>
+                                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                        <span>{error}</span>
+                                    </div>
+                                )}
+
+                                <div className="rounded-3xl p-6 space-y-5"
+                                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+
+                                    <div>
+                                        <label className="text-[11px] font-semibold tracking-[0.15em] uppercase block mb-2"
+                                            style={{ color: 'var(--hotel-primary)' }}>Nacionalidad</label>
+                                        <select value={nationality} onChange={e => setNationality(e.target.value)}
+                                            className="w-full py-3.5 px-4 rounded-2xl text-white text-sm outline-none appearance-none"
+                                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                            <option value="">Seleccionar país...</option>
+                                            {[['AR','Argentina'],['BR','Brasil'],['CL','Chile'],['UY','Uruguay'],['PY','Paraguay'],
+                                              ['BO','Bolivia'],['PE','Perú'],['CO','Colombia'],['MX','México'],['US','EEUU'],
+                                              ['ES','España'],['OT','Otra']].map(([v,l]) => (
+                                                <option key={v} value={v}>{l}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[11px] font-semibold tracking-[0.15em] uppercase block mb-2"
+                                            style={{ color: 'var(--hotel-primary)' }}>DNI / Pasaporte</label>
+                                        <input type="text" value={documentNumber}
+                                            onChange={e => setDocumentNumber(e.target.value)}
+                                            placeholder="Número de documento"
+                                            className="w-full py-3.5 px-4 rounded-2xl text-white text-sm outline-none placeholder:opacity-30"
+                                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                                    </div>
+
+                                    {/* Signature */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="text-[11px] font-semibold tracking-[0.15em] uppercase"
+                                                style={{ color: 'var(--hotel-primary)' }}>Firma digital</label>
+                                            {hasSigned && (
+                                                <button onClick={clearCanvas}
+                                                    className="flex items-center gap-1 text-[10px] uppercase tracking-wide"
+                                                    style={{ color: 'rgba(240,235,227,0.35)' }}>
+                                                    <Trash2 className="w-3 h-3" /> Limpiar
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="rounded-2xl overflow-hidden relative" style={{ height: 120, background: 'rgba(255,255,255,0.95)' }}>
+                                            <canvas ref={canvasRef}
+                                                className="absolute inset-0 w-full h-full touch-none cursor-crosshair"
+                                                onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
+                                                onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw} />
+                                            {!hasSigned && (
+                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                    <span className="text-sm font-medium" style={{ color: 'rgba(8,8,8,0.25)' }}>
+                                                        Firmá aquí
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className="text-[10px] mt-1.5 text-center" style={{ color: 'rgba(240,235,227,0.25)' }}>
+                                            Al firmar aceptás los términos y condiciones del hotel.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <button onClick={handleFinish} disabled={loading}
+                                    className="w-full py-4 rounded-2xl font-heading font-bold text-[15px] tracking-wide flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
+                                    style={{ background: 'var(--hotel-primary)', color: '#080808' }}>
+                                    {loading
+                                        ? <Loader2 className="w-5 h-5 animate-spin" />
+                                        : <>Finalizar Check-in <ArrowRight className="w-4 h-4" /></>}
+                                </button>
+                            </motion.div>
+                        )}
+
+                        {/* Step 3: Success */}
+                        {step === 3 && (
+                            <motion.div key="step3"
+                                initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+                                transition={{ duration: 0.4 }}
+                                className="rounded-3xl p-10 text-center space-y-6"
+                                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+
+                                <div className="w-20 h-20 rounded-full mx-auto flex items-center justify-center"
+                                    style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', boxShadow: '0 0 40px rgba(16,185,129,0.2)' }}>
+                                    <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+                                </div>
+
+                                <div>
+                                    <h3 className="font-heading text-2xl font-bold text-white mb-2">
+                                        {alreadyCheckedIn ? '¡Ya estás registrado!' : '¡Todo listo!'}
+                                    </h3>
+                                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(240,235,227,0.45)' }}>
+                                        {alreadyCheckedIn
+                                            ? 'Tu check-in digital ya fue completado anteriormente.'
+                                            : 'Tu check-in se completó. Solo pasá a retirar tu llave en recepción cuando llegues.'}
+                                    </p>
+                                </div>
+
+                                {roomNumber && (
+                                    <div className="py-3 px-6 rounded-2xl inline-block"
+                                        style={{ background: 'rgba(201,150,74,0.1)', border: '1px solid rgba(201,150,74,0.2)' }}>
+                                        <p className="text-[11px] uppercase tracking-wider mb-0.5" style={{ color: 'rgba(201,150,74,0.6)' }}>Tu habitación</p>
+                                        <p className="font-heading text-3xl font-bold" style={{ color: 'var(--hotel-primary)' }}>{roomNumber}</p>
+                                    </div>
+                                )}
+
+                                <button onClick={() => router.replace(`/${hotelId}`)}
+                                    className="w-full py-4 rounded-2xl font-heading font-bold text-sm tracking-wide transition-all active:scale-[0.98]"
+                                    style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(240,235,227,0.8)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                    Volver al inicio
+                                </button>
+                            </motion.div>
+                        )}
+
+                    </AnimatePresence>
                 </div>
-            </motion.div>
+            </div>
         </div>
     );
 }
