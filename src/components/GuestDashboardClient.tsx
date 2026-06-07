@@ -1,8 +1,16 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Wifi, MessageSquare, Coffee, Sparkles, KeyRound, ChevronRight, X, Loader2 } from "lucide-react";
+import { Wifi, MessageSquare, Sparkles, KeyRound, ChevronRight, X, Loader2, ClipboardCheck, Calendar } from "lucide-react";
 import { useState } from "react";
+import Link from "next/link";
+
+function getGreeting() {
+    const h = new Date().getHours();
+    if (h >= 6 && h < 12) return 'Buenos días';
+    if (h >= 12 && h < 20) return 'Buenas tardes';
+    return 'Buenas noches';
+}
 
 type Experience = {
     id: string;
@@ -82,14 +90,9 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
             >
                 {/* 1. Header Hero Personalizado */}
                 <motion.div variants={itemVariants} className="space-y-2 mt-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="font-heading text-3xl font-light text-white">
-                            Buenas noches, <span className="font-bold text-hotel-primary">{guestName.split(' ')[0] || 'Huésped'}</span>
-                        </h2>
-                        <div className="flex items-center space-x-2 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
-                            <span className="text-white/80 text-sm font-medium">24°C</span>
-                        </div>
-                    </div>
+                    <h2 className="font-heading text-3xl font-light text-white">
+                        {getGreeting()}, <span className="font-bold text-hotel-primary">{guestName.split(' ')[0] || 'Huésped'}</span>
+                    </h2>
                     <p className="text-stone-400 text-sm tracking-wide">¿En qué podemos asistirte hoy?</p>
                 </motion.div>
 
@@ -113,30 +116,49 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
                     </button>
 
                     <div className="grid grid-cols-2 gap-4">
-                        {/* Acción 2: Llave Digital */}
-                        <button className="relative overflow-hidden rounded-[2rem] bg-white/5 backdrop-blur-xl border border-white/10 p-5 text-left group transition-all active:scale-[0.98] hover:bg-white/10 flex flex-col justify-between aspect-square">
+                        {/* Acción 2: Habitación */}
+                        <div className="relative overflow-hidden rounded-[2rem] bg-white/5 backdrop-blur-xl border border-white/10 p-5 text-left flex flex-col justify-between aspect-square">
                             <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
                                 <KeyRound className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <p className="text-hotel-primary text-xs font-bold uppercase tracking-wider mb-1">{roomNumber ? `Hab. ${roomNumber}` : 'Mi Hab.'}</p>
-                                <h3 className="font-heading text-lg font-bold text-white">Llave Digital</h3>
+                                <p className="text-hotel-primary text-xs font-bold uppercase tracking-wider mb-1">Mi habitación</p>
+                                <h3 className="font-heading text-2xl font-bold text-white">{roomNumber || '—'}</h3>
                             </div>
-                        </button>
+                        </div>
 
-                        {/* Acción 3: Wi-Fi / Info */}
-                        <button className="relative overflow-hidden rounded-[2rem] bg-white/5 backdrop-blur-xl border border-white/10 p-5 text-left group transition-all active:scale-[0.98] hover:bg-white/10 flex flex-col justify-between aspect-square">
+                        {/* Acción 3: Check-out */}
+                        <div className="relative overflow-hidden rounded-[2rem] bg-white/5 backdrop-blur-xl border border-white/10 p-5 text-left flex flex-col justify-between aspect-square">
                             <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
-                                <Wifi className="w-5 h-5 text-white" />
+                                <Calendar className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <p className="text-stone-400 text-xs font-medium uppercase tracking-wider mb-1">
-                                    {checkOut ? `Check-out: ${new Date(checkOut + 'T12:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}` : 'Conectado'}
-                                </p>
-                                <h3 className="font-heading text-lg font-bold text-white">Red Wi-Fi</h3>
+                                <p className="text-stone-400 text-xs font-medium uppercase tracking-wider mb-1">Check-out</p>
+                                <h3 className="font-heading text-lg font-bold text-white">
+                                    {checkOut
+                                        ? new Date(checkOut + 'T12:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })
+                                        : '—'}
+                                </h3>
                             </div>
-                        </button>
+                        </div>
                     </div>
+
+                    {/* Acción 4: Check-in Digital */}
+                    <Link
+                        href={`/${hotelId}/checkin`}
+                        className="w-full relative overflow-hidden rounded-[2rem] bg-white/5 backdrop-blur-xl border border-hotel-primary/20 p-5 text-left flex items-center justify-between group transition-all active:scale-[0.98] hover:bg-white/10 hover:border-hotel-primary/40"
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-hotel-primary/15 flex items-center justify-center">
+                                <ClipboardCheck className="w-5 h-5 text-hotel-primary" />
+                            </div>
+                            <div>
+                                <h3 className="font-heading text-base font-bold text-white">Check-in Digital</h3>
+                                <p className="text-stone-400 text-xs">Evitá la fila en recepción</p>
+                            </div>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-stone-500 group-hover:text-hotel-primary group-hover:translate-x-1 transition-all" />
+                    </Link>
                 </motion.div>
 
                 {/* 3. Catálogo de Servicios (Upselling Luxury) */}

@@ -3,6 +3,7 @@ import { createSSRSupabase } from "@/lib/supabase-server";
 import { User, KeyRound, Calendar, CreditCard, Receipt } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import LogoutButton from "@/components/LogoutButton";
 
 export const revalidate = 0; // Dynamic
 
@@ -119,12 +120,13 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ h
                 </div>
             </div>
 
-            {/* Settings (Mock) */}
-            <div className="space-y-2 pt-4">
+            {/* Settings */}
+            <div className="space-y-3 pt-4">
                 <button className="w-full bg-zinc-900 border border-white/10 text-stone-300 py-4 px-6 rounded-2xl flex justify-between items-center hover:bg-zinc-800 transition-colors">
                     <span className="font-medium">Gestionar Tarjetas</span>
                     <CreditCard className="w-5 h-5 text-stone-500" />
                 </button>
+                <LogoutButton hotelId={hotelId} />
             </div>
         </div>
     );
