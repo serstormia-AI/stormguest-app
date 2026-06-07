@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { useState } from "react";
 import { MessageSquare, Sparkles, KeyRound, ChevronRight, X, Loader2, ClipboardCheck, Calendar, LogOut } from "lucide-react";
 import Link from "next/link";
@@ -39,8 +39,8 @@ type Props = {
     checkOut: string | null;
 };
 
-const stagger = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.08 } } };
-const fadeUp  = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } } };
+const stagger: Variants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.08 } } };
+const fadeUp: Variants  = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0, transition: { duration: 0.45 } } };
 
 export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, experiences, guestName, roomNumber, checkOut }: Props) {
     const router = useRouter();
