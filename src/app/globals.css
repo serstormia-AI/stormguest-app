@@ -5,19 +5,16 @@
   --color-foreground: var(--foreground);
   --color-hotel-primary: var(--hotel-primary);
   --color-hotel-primary-light: var(--hotel-primary-light);
-  
+
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-heading: 'Syne', sans-serif;
 }
 
 :root {
-  /* Dark Mode Default Foundation */
-  --background: #030712; /* Deep slate / black */
-  --foreground: #f8fafc;
-  
-  /* Dynamic Hotel Colors (Fallback values) */
-  --hotel-primary: #3b82f6; 
-  --hotel-primary-light: #60a5fa;
+  --background: #080808;
+  --foreground: #f0ebe3;
+  --hotel-primary: #C9964A;
+  --hotel-primary-light: #E2B96E;
 }
 
 body {
@@ -25,17 +22,75 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
 }
 
-/* Utilities */
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
+/* Grain texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.4;
 }
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+
+/* Scrollbar */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Custom scrollbar for main content */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+/* Input autofill reset */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: white;
+  -webkit-box-shadow: 0 0 0px 1000px rgba(0,0,0,0.5) inset;
+  transition: background-color 5000s ease-in-out 0s;
 }
+
+/* Gold shimmer animation */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.gold-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--hotel-primary) 0%,
+    var(--hotel-primary-light) 50%,
+    var(--hotel-primary) 100%
+  );
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Fade up animation */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up { animation: fadeUp 0.5s ease forwards; }
+
+/* Ambient glow pulse */
+@keyframes ambientPulse {
+  0%, 100% { opacity: 0.06; transform: scale(1); }
+  50% { opacity: 0.1; transform: scale(1.05); }
+}
+
+.ambient-pulse { animation: ambientPulse 6s ease-in-out infinite; }

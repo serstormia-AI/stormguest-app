@@ -1,8 +1,7 @@
 import { getAdminSupabase } from "@/lib/supabase";
-import { notFound } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 
-export const revalidate = 3600; // Cache for 1 hour
+export const revalidate = 3600;
 
 export default async function HotelLayout({
     children,
@@ -11,70 +10,86 @@ export default async function HotelLayout({
     children: React.ReactNode;
     params: Promise<{ hotelId: string }>;
 }) {
-    // Await params in Next.js 15+
-    const resolvedParams = await params;
-    const { hotelId } = resolvedParams;
+    const { hotelId } = await params;
 
-    // 1. Fetch hotel data from Supabase
-    let hotelData = null;
-    
+    let hotelData: {
+        name: string;
+        primary_color: string;
+        primary_color_light: string;
+        logo_url?: string;
+        category?: string;
+    } = {
+        name: "Serstormia Hotel & Suites",
+        primary_color: "#C9964A",
+        primary_color_light: "#E2B96E",
+        category: "Luxury Collection",
+    };
+
     try {
         const { data, error } = await getAdminSupabase()
             .from('hotels')
-            .select('*')
+            .select('name, primary_color, primary_color_light, logo_url')
             .eq('slug', hotelId)
             .single();
-            
+
         if (!error && data) {
-            hotelData = data;
+            hotelData = {
+                ...hotelData,
+                ...data,
+            };
         }
     } catch (e) {
-        console.error("Supabase error:", e);
+        console.error("Hotel layout error:", e);
     }
 
-    // Fallback Mock Data if Supabase is empty
-    if (!hotelData) {
-        if (hotelId === 'demo') {
-            hotelData = {
-                name: "Hotel Interamericano",
-                primary_color: "#10b981", // Emerald
-                primary_color_light: "#34d399",
-                logo_url: "🏨"
-            };
-        } else {
-            // Optional: return notFound() if strict
-            hotelData = {
-                name: "StormGuest Hotel",
-                primary_color: "#3b82f6", // Blue
-                primary_color_light: "#60a5fa",
-                logo_url: "⚡"
-            };
-        }
-    }
-
-    // 2. Inject CSS Variables dynamically
     const dynamicStyles = {
         '--hotel-primary': hotelData.primary_color,
         '--hotel-primary-light': hotelData.primary_color_light,
     } as React.CSSProperties;
 
+    const initial = hotelData.name?.[0]?.toUpperCase() ?? 'S';
+    const isUrl = (hotelData.logo_url?.length ?? 0) > 5;
+
     return (
         <div style={dynamicStyles} className="min-h-screen flex flex-col">
-            {/* Top Navigation Bar Dynamic */}
-            <header className="px-6 py-4 border-b border-white/5 flex items-center justify-between backdrop-blur-md bg-black/20 sticky top-0 z-50">
-                <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-xl bg-hotel-primary/20 flex items-center justify-center border border-hotel-primary/30">
-                        {/* If logo_url is an emoji or URL */}
-                        {hotelData.logo_url?.length < 5 ? (
-                            <span className="text-xl">{hotelData.logo_url}</span>
-                        ) : (
+
+            {/* ── Top Navigation Bar ── */}
+            <header className="px-5 py-3.5 flex items-center justify-between sticky top-0 z-50 border-b border-white/[0.06]"
+                style={{ background: 'rgba(8,8,8,0.75)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}>
+
+                <div className="flex items-center gap-3">
+                    {/* Logo / Monogram */}
+                    <div className="relative w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden"
+                        style={{ background: `linear-gradient(135deg, ${hotelData.primary_color}30, ${hotelData.primary_color}15)`, border: `1px solid ${hotelData.primary_color}40`, boxShadow: `0 0 16px ${hotelData.primary_color}20` }}>
+                        {isUrl ? (
                             <img src={hotelData.logo_url} alt="Logo" className="w-6 h-6 object-contain" />
+                        ) : (
+                            <span className="font-heading font-black text-lg" style={{ color: hotelData.primary_color }}>
+                                {hotelData.logo_url || initial}
+                            </span>
                         )}
                     </div>
-                    <h1 className="font-heading font-bold text-lg tracking-wide text-white">
-                        {hotelData.name}
-                    </h1>
+
+                    {/* Hotel Name + Category */}
+                    <div className="flex flex-col leading-none">
+                        <span className="font-heading font-bold text-[15px] text-white tracking-wide">
+                            {hotelData.name}
+                        </span>
+                        <div className="flex items-center gap-1 mt-[3px]">
+                            {[...Array(5)].map((_, i) => (
+                                <svg key={i} className="w-2.5 h-2.5" viewBox="0 0 24 24" fill={hotelData.primary_color}>
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                </svg>
+                            ))}
+                            <span className="text-[10px] tracking-widest uppercase ml-1" style={{ color: `${hotelData.primary_color}80` }}>
+                                {hotelData.category || 'Luxury Collection'}
+                            </span>
+                        </div>
+                    </div>
                 </div>
+
+                {/* Right side: subtle indicator */}
+                <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: hotelData.primary_color, boxShadow: `0 0 6px ${hotelData.primary_color}` }} />
             </header>
 
             {/* Dynamic Content */}
@@ -82,7 +97,6 @@ export default async function HotelLayout({
                 {children}
             </main>
 
-            {/* Bottom Navigation (Only show if not on checkin page) */}
             <BottomNav hotelId={hotelId} />
         </div>
     );

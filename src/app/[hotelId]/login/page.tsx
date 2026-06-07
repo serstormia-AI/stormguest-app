@@ -3,8 +3,10 @@
 import { motion } from "framer-motion";
 import { use, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { DoorOpen, User, Loader2, AlertCircle, Hotel } from "lucide-react";
+import { DoorOpen, User, Loader2, AlertCircle } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase";
+
+const HOTEL_BG = "https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1080&q=80";
 
 export default function GuestLoginPage({ params }: { params: Promise<{ hotelId: string }> }) {
     const { hotelId } = use(params);
@@ -19,7 +21,6 @@ export default function GuestLoginPage({ params }: { params: Promise<{ hotelId: 
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!roomNumber.trim() || !lastName.trim()) {
             setError("Por favor, completa tu número de habitación y apellido.");
             return;
@@ -30,14 +31,9 @@ export default function GuestLoginPage({ params }: { params: Promise<{ hotelId: 
 
         try {
             const supabase = createBrowserSupabase();
-
-            // 1. Create an anonymous Supabase session first so we get a valid auth.uid()
             const { data: { user }, error: authError } = await supabase.auth.signInAnonymously();
-            if (authError || !user) {
-                throw new Error("No se pudo establecer una conexión segura. Inténtalo de nuevo.");
-            }
+            if (authError || !user) throw new Error("No se pudo establecer una conexión segura.");
 
-            // 2. Verify the reservation against the backend API
             const res = await fetch("/api/checkin/verify", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -50,19 +46,13 @@ export default function GuestLoginPage({ params }: { params: Promise<{ hotelId: 
             });
 
             const data = await res.json();
-
             if (!res.ok) {
-                // Sign out the anonymous session so the user can try again cleanly
                 await supabase.auth.signOut();
                 throw new Error(data.error || "No encontramos una reserva activa con esos datos.");
             }
 
-            // 3. Stamp the hotel slug and force session refresh so middleware
-            //    reads the updated metadata from the cookie before redirecting.
             await supabase.auth.updateUser({ data: { hotelSlug: hotelId } });
             await supabase.auth.refreshSession();
-
-            // 4. Redirect to the original destination (or the hotel dashboard)
             router.replace(redirectTo);
 
         } catch (err: any) {
@@ -72,107 +62,171 @@ export default function GuestLoginPage({ params }: { params: Promise<{ hotelId: 
     };
 
     return (
-        <div className="min-h-screen flex flex-col bg-[#0A0A0A]">
-            {/* Ambient glow */}
-            <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-hotel-primary/8 rounded-full blur-[120px] -z-10 pointer-events-none" />
+        <div className="min-h-screen flex flex-col relative overflow-hidden bg-[#080808]">
 
-            <div className="flex-1 flex flex-col items-center justify-center p-6">
+            {/* ── Hero background ── */}
+            <div className="absolute inset-0 z-0">
+                <img
+                    src={HOTEL_BG}
+                    alt="Hotel"
+                    className="w-full h-full object-cover object-center"
+                    style={{ filter: 'brightness(0.35) saturate(0.8)' }}
+                />
+                {/* Gradient overlay: transparent top → solid black bottom */}
+                <div className="absolute inset-0"
+                    style={{ background: 'linear-gradient(to bottom, rgba(8,8,8,0.2) 0%, rgba(8,8,8,0.5) 40%, rgba(8,8,8,0.92) 70%, #080808 100%)' }} />
+            </div>
+
+            {/* ── Ambient glow ── */}
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[400px] h-[400px] rounded-full pointer-events-none z-[1] ambient-pulse"
+                style={{ background: 'radial-gradient(circle, var(--hotel-primary) 0%, transparent 70%)', opacity: 0.07 }} />
+
+            {/* ── Content ── */}
+            <div className="relative z-10 flex flex-col min-h-screen">
+
+                {/* Top branding — visible in hero area */}
                 <motion.div
-                    initial={{ opacity: 0, y: 24 }}
+                    initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.45, ease: "easeOut" }}
-                    className="w-full max-w-sm space-y-8"
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    className="flex flex-col items-center pt-16 pb-8 px-6"
                 >
-                    {/* Logo / Hotel identity */}
-                    <div className="text-center space-y-3">
-                        <div className="w-16 h-16 rounded-2xl bg-hotel-primary/20 border border-hotel-primary/30 flex items-center justify-center mx-auto">
-                            <Hotel className="w-8 h-8 text-hotel-primary" />
-                        </div>
-                        <div className="space-y-1">
-                            <h1 className="font-heading text-2xl font-bold text-white tracking-wide">
-                                Bienvenido
-                            </h1>
-                            <p className="text-stone-400 text-sm">
-                                Ingresa los datos de tu reserva para acceder
+                    {/* Monogram */}
+                    <div className="w-16 h-16 rounded-2xl mb-5 flex items-center justify-center"
+                        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(20px)' }}>
+                        <span className="font-heading font-black text-3xl" style={{ color: 'var(--hotel-primary)' }}>S</span>
+                    </div>
+
+                    <p className="text-[11px] tracking-[0.3em] uppercase mb-2" style={{ color: 'var(--hotel-primary)' }}>
+                        Luxury Collection
+                    </p>
+                    <h1 className="font-heading text-3xl font-bold text-white text-center leading-tight">
+                        Serstormia<br />Hotel & Suites
+                    </h1>
+                    <div className="flex items-center gap-1 mt-2">
+                        {[...Array(5)].map((_, i) => (
+                            <svg key={i} className="w-3 h-3" viewBox="0 0 24 24" style={{ fill: 'var(--hotel-primary)' }}>
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </svg>
+                        ))}
+                    </div>
+                </motion.div>
+
+                {/* Spacer — pushes form to bottom */}
+                <div className="flex-1" />
+
+                {/* ── Login form card ── */}
+                <motion.div
+                    initial={{ opacity: 0, y: 40 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
+                    className="px-5 pb-10"
+                >
+                    <div className="max-w-sm mx-auto">
+                        {/* Tagline */}
+                        <div className="text-center mb-6">
+                            <h2 className="font-heading text-xl font-semibold text-white">Accedé a tu estadía</h2>
+                            <p className="text-sm mt-1" style={{ color: 'rgba(240,235,227,0.45)' }}>
+                                Ingresá los datos de tu reserva
                             </p>
                         </div>
-                    </div>
 
-                    {/* Login Card */}
-                    <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl space-y-5">
+                        {/* Card */}
+                        <div className="rounded-3xl p-6 space-y-5"
+                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)' }}>
 
-                        {/* Error banner */}
-                        {error && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-2xl text-sm flex items-start gap-2"
-                            >
-                                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                                <span>{error}</span>
-                            </motion.div>
-                        )}
+                            {/* Error */}
+                            {error && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="flex items-start gap-2.5 p-3 rounded-2xl text-sm"
+                                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#FCA5A5' }}
+                                >
+                                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                    <span>{error}</span>
+                                </motion.div>
+                            )}
 
-                        <form onSubmit={handleLogin} className="space-y-4">
-                            {/* Room Number */}
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-hotel-primary uppercase tracking-wider block">
-                                    Número de habitación
-                                </label>
-                                <div className="relative">
-                                    <DoorOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-500" />
-                                    <input
-                                        type="text"
-                                        value={roomNumber}
-                                        onChange={(e) => setRoomNumber(e.target.value)}
-                                        placeholder="Ej: 101"
-                                        autoComplete="off"
-                                        autoCapitalize="characters"
-                                        className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-hotel-primary focus:ring-1 focus:ring-hotel-primary transition-all placeholder:text-stone-600"
-                                    />
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                {/* Room */}
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-semibold tracking-[0.15em] uppercase block"
+                                        style={{ color: 'var(--hotel-primary)' }}>
+                                        Número de habitación
+                                    </label>
+                                    <div className="relative">
+                                        <DoorOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4"
+                                            style={{ color: 'rgba(240,235,227,0.3)' }} />
+                                        <input
+                                            type="text"
+                                            value={roomNumber}
+                                            onChange={(e) => setRoomNumber(e.target.value)}
+                                            placeholder="Ej: 101"
+                                            autoComplete="off"
+                                            className="w-full py-4 pl-11 pr-4 rounded-2xl text-white text-sm outline-none transition-all placeholder:opacity-30"
+                                            style={{
+                                                background: 'rgba(255,255,255,0.05)',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                            }}
+                                            onFocus={e => e.target.style.borderColor = 'var(--hotel-primary)'}
+                                            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* Last Name */}
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-hotel-primary uppercase tracking-wider block">
-                                    Apellido
-                                </label>
-                                <div className="relative">
-                                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-500" />
-                                    <input
-                                        type="text"
-                                        value={lastName}
-                                        onChange={(e) => setLastName(e.target.value)}
-                                        placeholder="Tu apellido"
-                                        autoComplete="family-name"
-                                        autoCapitalize="words"
-                                        className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-hotel-primary focus:ring-1 focus:ring-hotel-primary transition-all placeholder:text-stone-600"
-                                    />
+                                {/* Last name */}
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-semibold tracking-[0.15em] uppercase block"
+                                        style={{ color: 'var(--hotel-primary)' }}>
+                                        Apellido
+                                    </label>
+                                    <div className="relative">
+                                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4"
+                                            style={{ color: 'rgba(240,235,227,0.3)' }} />
+                                        <input
+                                            type="text"
+                                            value={lastName}
+                                            onChange={(e) => setLastName(e.target.value)}
+                                            placeholder="Tu apellido"
+                                            autoComplete="family-name"
+                                            className="w-full py-4 pl-11 pr-4 rounded-2xl text-white text-sm outline-none transition-all placeholder:opacity-30"
+                                            style={{
+                                                background: 'rgba(255,255,255,0.05)',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                            }}
+                                            onFocus={e => e.target.style.borderColor = 'var(--hotel-primary)'}
+                                            onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* Submit */}
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full bg-hotel-primary hover:bg-hotel-primary-light text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60 mt-2"
-                            >
-                                {loading ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    "Acceder a mi estadía"
-                                )}
-                            </button>
-                        </form>
+                                {/* Divider */}
+                                <div className="h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+
+                                {/* Submit */}
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full py-4 rounded-2xl font-heading font-bold text-[15px] tracking-wide transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2"
+                                    style={{ background: 'var(--hotel-primary)', color: '#080808' }}
+                                >
+                                    {loading ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        "Acceder a mi estadía"
+                                    )}
+                                </button>
+                            </form>
+                        </div>
+
+                        <p className="text-center text-xs mt-5" style={{ color: 'rgba(240,235,227,0.25)' }}>
+                            ¿Problemas para acceder?{" "}
+                            <span className="underline underline-offset-2 cursor-pointer" style={{ color: 'rgba(240,235,227,0.45)' }}>
+                                Contactá a recepción
+                            </span>
+                        </p>
                     </div>
-
-                    <p className="text-center text-xs text-stone-600">
-                        ¿Problemas para acceder?{" "}
-                        <span className="text-stone-400 underline underline-offset-2 cursor-pointer">
-                            Contacta a recepción
-                        </span>
-                    </p>
                 </motion.div>
             </div>
         </div>
