@@ -169,42 +169,7 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
                     </button>
                 </motion.div>
 
-                {/* ── 4. Secondary actions ── */}
-                <motion.div variants={fadeUp} className="space-y-2.5">
-                    {/* Check-in digital */}
-                    <Link href={`/${hotelId}/checkin`}
-                        className="flex items-center justify-between p-4 rounded-2xl transition-all active:scale-[0.98] group"
-                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                                style={{ background: 'rgba(201,150,74,0.1)', border: '1px solid rgba(201,150,74,0.2)' }}>
-                                <ClipboardCheck className="w-4 h-4" style={{ color: 'var(--hotel-primary)' }} />
-                            </div>
-                            <div>
-                                <p className="text-sm font-semibold text-white">Check-in Digital</p>
-                                <p className="text-xs mt-0.5" style={{ color: 'rgba(240,235,227,0.35)' }}>Evitá la fila en recepción</p>
-                            </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5"
-                            style={{ color: 'rgba(240,235,227,0.25)' }} />
-                    </Link>
-
-                    {/* Logout */}
-                    <button
-                        onClick={handleLogout}
-                        className="flex items-center justify-between w-full p-4 rounded-2xl transition-all active:scale-[0.98] group"
-                        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                                style={{ background: 'rgba(255,255,255,0.05)' }}>
-                                <LogOut className="w-4 h-4" style={{ color: 'rgba(240,235,227,0.4)' }} />
-                            </div>
-                            <p className="text-sm font-medium" style={{ color: 'rgba(240,235,227,0.4)' }}>Cerrar sesión</p>
-                        </div>
-                    </button>
-                </motion.div>
-
-                {/* ── 5. Experiences catalog ── */}
+                {/* ── 4. Experiences catalog ── */}
                 {experiences.length > 0 && (
                     <motion.div variants={fadeUp} className="space-y-4 pt-2">
                         <div className="flex items-end justify-between">
@@ -257,6 +222,40 @@ export default function GuestDashboardClient({ hotelId, dbHotelId, guestId, expe
                         </div>
                     </motion.div>
                 )}
+
+                {/* ── 5. Secondary actions ── */}
+                <motion.div variants={fadeUp} className="space-y-2.5">
+                    <Link href={`/${hotelId}/checkin`}
+                        className="flex items-center justify-between p-4 rounded-2xl transition-all active:scale-[0.98] group"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                                style={{ background: 'rgba(201,150,74,0.1)', border: '1px solid rgba(201,150,74,0.2)' }}>
+                                <ClipboardCheck className="w-4 h-4" style={{ color: 'var(--hotel-primary)' }} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-white">Check-in Digital</p>
+                                <p className="text-xs mt-0.5" style={{ color: 'rgba(240,235,227,0.35)' }}>Evitá la fila en recepción</p>
+                            </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5"
+                            style={{ color: 'rgba(240,235,227,0.25)' }} />
+                    </Link>
+
+                    <button
+                        onClick={handleLogout}
+                        className="flex items-center justify-between w-full p-4 rounded-2xl transition-all active:scale-[0.98]"
+                        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                                style={{ background: 'rgba(255,255,255,0.05)' }}>
+                                <LogOut className="w-4 h-4" style={{ color: 'rgba(240,235,227,0.4)' }} />
+                            </div>
+                            <p className="text-sm font-medium" style={{ color: 'rgba(240,235,227,0.4)' }}>Cerrar sesión</p>
+                        </div>
+                    </button>
+                </motion.div>
+
             </motion.div>
 
             {/* ── Purchase modal ── */}
