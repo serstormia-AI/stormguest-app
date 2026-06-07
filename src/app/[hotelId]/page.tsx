@@ -36,7 +36,7 @@ export default async function GuestDashboardPage({ params }: { params: Promise<{
         .eq('slug', hotelId)
         .single();
 
-    type Experience = { id: string; title: string; price: number; currency: string; description: string; image_url: string; };
+    type Experience = { id: string; title: string; price: number; description: string; image_url: string; };
     let experiences: Experience[] = [];
 
     if (hotelData) {
