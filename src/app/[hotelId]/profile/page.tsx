@@ -4,6 +4,7 @@ import { User, KeyRound, Calendar, Receipt } from "lucide-react";
 import { redirect } from "next/navigation";
 import LogoutButton from "@/components/LogoutButton";
 import GuestRequestsClient from "@/components/GuestRequestsClient";
+import GuestReviewForm from "@/components/GuestReviewForm";
 
 export const revalidate = 0;
 
@@ -34,11 +35,16 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ h
 
     const today = new Date().toISOString().split('T')[0];
     const { data: reservation } = await supabase
-        .from('reservations').select('room_number, check_in, check_out, status')
+        .from('reservations').select('id, room_number, check_in, check_out, status')
         .eq('guest_id', guest.id)
         .gte('check_out', today)
         .order('check_in', { ascending: false })
         .limit(1).maybeSingle();
+
+    // Get hotel UUID for review form
+    const { data: hotelData } = await supabase
+        .from('hotels').select('id').eq('slug', hotelId).single();
+    const dbHotelId = hotelData?.id ?? '';
 
     const initials = getInitials(guest.name || 'Huésped');
 
@@ -121,6 +127,13 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ h
                 </div>
                 <GuestRequestsClient guestId={guest.id} />
             </div>
+
+            {/* ── Reseña ── */}
+            <GuestReviewForm
+                guestId={guest.id}
+                dbHotelId={dbHotelId}
+                reservationId={reservation?.id ?? null}
+            />
 
             {/* ── Logout ── */}
             <LogoutButton hotelId={hotelId} />
