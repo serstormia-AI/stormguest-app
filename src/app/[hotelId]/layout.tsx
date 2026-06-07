@@ -1,5 +1,6 @@
 import { getAdminSupabase } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
+import { notFound } from "next/navigation";
 
 export const revalidate = 3600;
 
@@ -18,12 +19,7 @@ export default async function HotelLayout({
         primary_color_light: string;
         logo_url?: string;
         category?: string;
-    } = {
-        name: "Serstormia Hotel & Suites",
-        primary_color: "#C9964A",
-        primary_color_light: "#E2B96E",
-        category: "Luxury Collection",
-    };
+    } | null = null;
 
     try {
         const { data, error } = await getAdminSupabase()
@@ -34,13 +30,18 @@ export default async function HotelLayout({
 
         if (!error && data) {
             hotelData = {
-                ...hotelData,
+                primary_color: "#C9964A",
+                primary_color_light: "#E2B96E",
+                category: "Luxury Collection",
                 ...data,
             };
         }
     } catch (e) {
         console.error("Hotel layout error:", e);
     }
+
+    // Hotel slug not found in DB → 404
+    if (!hotelData) notFound();
 
     const dynamicStyles = {
         '--hotel-primary': hotelData.primary_color,
