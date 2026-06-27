@@ -106,10 +106,8 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
             return;
         }
 
-        // If we didn't have a convId yet, re-fetch to get it
-        if (!convId) {
-            await fetchMessages();
-        }
+        // Always refetch — ensures bot response shows even if Realtime missed the event
+        await fetchMessages();
     };
 
     return (
