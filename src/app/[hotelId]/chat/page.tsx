@@ -28,10 +28,10 @@ export default async function GuestChatPage({ params }: { params: Promise<{ hote
         .eq('id', guest.hotel_id)
         .single();
 
-    // Pre-fetch conversation ID server-side (admin client bypasses RLS)
+    // Pre-fetch conversation ID and mode server-side (admin client bypasses RLS)
     const { data: conv } = await supabase
         .from('conversations')
-        .select('id')
+        .select('id, mode')
         .eq('guest_id', guest.id)
         .eq('hotel_id', guest.hotel_id)
         .maybeSingle();
@@ -43,6 +43,7 @@ export default async function GuestChatPage({ params }: { params: Promise<{ hote
             dbHotelId={guest.hotel_id}
             conciergeName={(hotel as { concierge_name?: string } | null)?.concierge_name ?? 'Julia'}
             initialConvId={conv?.id ?? null}
+            initialMode={(conv as { mode?: string } | null)?.mode ?? 'bot'}
         />
     );
 }

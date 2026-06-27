@@ -60,7 +60,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "No se pudo guardar el mensaje" }, { status: 500 });
         }
 
-        // 3. Fetch all context in parallel
+        // 3. Check conversation mode — if 'human', skip bot entirely
+        const { data: convMode } = await supabase
+            .from('conversations')
+            .select('mode')
+            .eq('id', convId)
+            .single();
+
+        if (convMode?.mode === 'human') {
+            return NextResponse.json({ success: true, mode: 'human' });
+        }
+
+        // 4. Fetch all context in parallel
         const [
             { data: recentMessages },
             { data: hotelData },

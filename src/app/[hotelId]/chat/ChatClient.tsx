@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState, useRef } from "react";
-import { Send, Sparkles } from "lucide-react";
+import { Send, Sparkles, UserCheck } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase";
 
 type Message = {
@@ -18,13 +18,14 @@ type Props = {
     dbHotelId: string;
     conciergeName: string;
     initialConvId: string | null;
+    initialMode: string;
 };
 
 const supabase = createBrowserSupabase();
 
 const QUICK_ACTIONS = ["🛎 Room Service", "🧹 Limpieza", "🕐 Late Check-out", "🗺 Recomendaciones"];
 
-export default function ChatClient({ hotelId, guestId, dbHotelId, conciergeName, initialConvId }: Props) {
+export default function ChatClient({ hotelId, guestId, dbHotelId, conciergeName, initialConvId, initialMode }: Props) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(true);
@@ -123,19 +124,27 @@ export default function ChatClient({ hotelId, guestId, dbHotelId, conciergeName,
             <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[500px] h-[400px] rounded-full pointer-events-none -z-10"
                 style={{ background: 'radial-gradient(circle, var(--hotel-primary) 0%, transparent 70%)', opacity: 0.04 }} />
 
-            {/* ── Julia header ── */}
+            {/* ── Header ── */}
             <div className="flex items-center gap-3 px-5 py-4 border-b"
                 style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(8,8,8,0.6)', backdropFilter: 'blur(20px)' }}>
                 <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 relative"
-                    style={{ background: 'linear-gradient(135deg, rgba(201,150,74,0.2) 0%, rgba(201,150,74,0.08) 100%)', border: '1px solid rgba(201,150,74,0.3)' }}>
-                    <Sparkles className="w-5 h-5" style={{ color: 'var(--hotel-primary)' }} />
+                    style={initialMode === 'human'
+                        ? { background: 'linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0.08) 100%)', border: '1px solid rgba(16,185,129,0.3)' }
+                        : { background: 'linear-gradient(135deg, rgba(201,150,74,0.2) 0%, rgba(201,150,74,0.08) 100%)', border: '1px solid rgba(201,150,74,0.3)' }
+                    }>
+                    {initialMode === 'human'
+                        ? <UserCheck className="w-5 h-5 text-emerald-400" />
+                        : <Sparkles className="w-5 h-5" style={{ color: 'var(--hotel-primary)' }} />
+                    }
                     <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#080808]"
                         style={{ background: '#10b981' }} />
                 </div>
                 <div>
-                    <p className="font-heading font-bold text-white text-sm leading-none">{conciergeName}</p>
+                    <p className="font-heading font-bold text-white text-sm leading-none">
+                        {initialMode === 'human' ? 'Recepción' : conciergeName}
+                    </p>
                     <p className="text-[11px] mt-0.5" style={{ color: 'rgba(240,235,227,0.4)' }}>
-                        Concierge Digital · Disponible 24/7
+                        {initialMode === 'human' ? 'Atendido por personal del hotel' : 'Concierge Digital · Disponible 24/7'}
                     </p>
                 </div>
             </div>
