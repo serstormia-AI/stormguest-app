@@ -16,18 +16,20 @@ type Props = {
     hotelId: string;
     guestId: string;
     dbHotelId: string;
+    conciergeName: string;
+    initialConvId: string | null;
 };
 
 const supabase = createBrowserSupabase();
 
 const QUICK_ACTIONS = ["🛎 Room Service", "🧹 Limpieza", "🕐 Late Check-out", "🗺 Recomendaciones"];
 
-export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
+export default function ChatClient({ hotelId, guestId, dbHotelId, conciergeName, initialConvId }: Props) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(true);
     const [isTyping, setIsTyping] = useState(false);
-    const [convId, setConvId] = useState<string | null>(null);
+    const [convId, setConvId] = useState<string | null>(initialConvId);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -57,27 +59,30 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
     }, [convId]);
 
     const fetchMessages = async () => {
-        // Step 1: find conversation for this guest + hotel
-        const { data: conv } = await supabase
-            .from('conversations')
-            .select('id')
-            .eq('guest_id', guestId)
-            .eq('hotel_id', dbHotelId)
-            .maybeSingle();
+        // Use convId from state (pre-fetched server-side or set after first message)
+        let currentConvId = convId;
 
-        if (!conv) {
-            // No conversation yet — nothing to show, wait for first message
-            setLoading(false);
-            return;
+        if (!currentConvId) {
+            // First message case: conversation was just created, find it
+            const { data: conv } = await supabase
+                .from('conversations')
+                .select('id')
+                .eq('guest_id', guestId)
+                .eq('hotel_id', dbHotelId)
+                .maybeSingle();
+
+            if (!conv) {
+                setLoading(false);
+                return;
+            }
+            currentConvId = conv.id;
+            setConvId(conv.id);
         }
 
-        setConvId(conv.id);
-
-        // Step 2: fetch messages for this conversation
         const { data } = await supabase
             .from('messages')
             .select('id, sender, content, created_at')
-            .eq('conversation_id', conv.id)
+            .eq('conversation_id', currentConvId)
             .order('created_at', { ascending: true });
 
         if (data) setMessages(data as Message[]);
@@ -128,7 +133,7 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
                         style={{ background: '#10b981' }} />
                 </div>
                 <div>
-                    <p className="font-heading font-bold text-white text-sm leading-none">Julia</p>
+                    <p className="font-heading font-bold text-white text-sm leading-none">{conciergeName}</p>
                     <p className="text-[11px] mt-0.5" style={{ color: 'rgba(240,235,227,0.4)' }}>
                         Concierge Digital · Disponible 24/7
                     </p>
@@ -150,7 +155,7 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
                     </div>
                     <div className="max-w-[80%] px-4 py-3 rounded-3xl rounded-tl-lg text-sm leading-relaxed"
                         style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(240,235,227,0.85)' }}>
-                        ¡Hola! Soy <span style={{ color: 'var(--hotel-primary)', fontWeight: 600 }}>Julia</span>, tu Concierge Digital. ¿En qué puedo asistirte durante tu estadía?
+                        ¡Hola! Soy <span style={{ color: 'var(--hotel-primary)', fontWeight: 600 }}>{conciergeName}</span>, tu Concierge Digital. ¿En qué puedo asistirte durante tu estadía?
                     </div>
                 </motion.div>
 
