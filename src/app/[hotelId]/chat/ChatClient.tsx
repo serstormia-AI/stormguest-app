@@ -108,6 +108,7 @@ export default function ChatClient({ hotelId, guestId, dbHotelId }: Props) {
 
         // Always refetch — ensures bot response shows even if Realtime missed the event
         await fetchMessages();
+        setIsTyping(false);
     };
 
     return (
